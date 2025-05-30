@@ -103,6 +103,56 @@ export async function calculateDemandForecast(
         y: venda.vendas,
       })
     })
+    
+    // Processar datas atípicas para o cálculo Prophet
+    const holidays = [];
+    
+    // Processar datas atípicas do formulário
+    if (datasAtipicasForm && datasAtipicasForm.length > 0) {
+      console.log('Processando datas atípicas do formulário para o cálculo Prophet');
+      datasAtipicasForm.forEach(periodo => {
+        const dataInicial = new Date(periodo.dataInicial);
+        const dataFinal = new Date(periodo.dataFinal);
+        const descricao = periodo.descricao || 'periodo_atipico';
+        
+        console.log(`Processando período atípico: ${dataInicial} a ${dataFinal} - ${descricao}`);
+        
+        // Adiciona cada dia do período como um holiday
+        const tempDate = new Date(dataInicial);
+        while (tempDate <= dataFinal) {
+          holidays.push({
+            holiday: descricao,
+            ds: new Date(tempDate)
+          });
+          tempDate.setDate(tempDate.getDate() + 1);
+        }
+      });
+      
+      console.log(`Total de dias atípicos processados: ${holidays.length}`);
+    } else {
+      // Fallback: buscar do banco de dados se não houver datas no formulário
+      console.log('Nenhuma data atípica encontrada no formulário, buscando do banco de dados...');
+      const { data: datasAtipicas } = await supabase
+        .from('datas_atipicas')
+        .select('data_inicial, data_final');
+
+      if (datasAtipicas && datasAtipicas.length > 0) {
+        datasAtipicas.forEach(periodo => {
+          const dataInicial = new Date(periodo.data_inicial);
+          const dataFinal = new Date(periodo.data_final);
+          
+          // Adiciona cada dia do período como um holiday
+          const tempDate = new Date(dataInicial);
+          while (tempDate <= dataFinal) {
+            holidays.push({
+              holiday: 'periodo_atipico',
+              ds: new Date(tempDate)
+            });
+            tempDate.setDate(tempDate.getDate() + 1);
+          }
+        });
+      }
+    }
 
     const resultados = []
 
@@ -124,11 +174,10 @@ export async function calculateDemandForecast(
           ? (dadosRecentes.reduce((sum, d) => sum + d.y, 0) / dadosRecentes.length) * diasPrevisao
           : 0
 
-      // Calcular previsão
-      const previsaoTotal = calculateProphetForecast(dadosSku, diasPrevisao, mediaRecente)
-
-      // Adicionar parâmetro holidays
-      // Nota: Isso deve ser implementado no seu script Python do Prophet
+      // Calcular previsão com datas atípicas
+      const previsaoTotal = calculateProphetForecast(dadosSku, diasPrevisao, mediaRecente, holidays)
+      
+      console.log(`Previsão calculada para SKU ${sku} com ${holidays.length} datas atípicas`)
 
       // Arredondar para múltiplos de 100
       const media = Math.ceil(previsaoTotal / 100) * 100
@@ -227,7 +276,7 @@ function parseCSV(csvText: string) {
 }
 
 // Função Prophet simplificada
-function calculateProphetForecast(dadosSku: any[], diasPrevisao: number, mediaRecente: number): number {
+function calculateProphetForecast(dadosSku: any[], diasPrevisao: number, mediaRecente: number, holidays: any[] = []): number {
   dadosSku.sort((a, b) => a.ds.getTime() - b.ds.getTime())
 
   const vendas = dadosSku.map((d) => d.y)
@@ -275,9 +324,24 @@ function calculateProphetForecast(dadosSku: any[], diasPrevisao: number, mediaRe
     const dataFutura = new Date(dataBase.getTime() + i * 24 * 60 * 60 * 1000)
     const diaSemana = dataFutura.getDay()
 
+    // Verificar se a data é atípica
+    const isHoliday = holidays.some(h => {
+      const holidayDate = new Date(h.ds)
+      return holidayDate.getFullYear() === dataFutura.getFullYear() && 
+             holidayDate.getMonth() === dataFutura.getMonth() && 
+             holidayDate.getDate() === dataFutura.getDate()
+    })
+
     const valorTendencia = intercepto + tendencia * (n + i)
     const valorSazonal = sazonalidade[diaSemana]
-    const previsaoDia = Math.max(0, valorTendencia + valorSazonal)
+    
+    // Ajustar previsão para datas atípicas (redução de 30% na previsão)
+    let previsaoDia = Math.max(0, valorTendencia + valorSazonal)
+    if (isHoliday) {
+      previsaoDia = previsaoDia * 0.7; // Redução de 30% para datas atípicas
+      console.log(`Data atípica encontrada para previsão: ${dataFutura.toISOString().split('T')[0]} - Ajustando valor`);
+    }
+    
     previsaoTotal += previsaoDia
   }
 
@@ -308,57 +372,6 @@ async function saveExcelFile(buffer: ArrayBuffer, filename: string): Promise<str
   const blob = new Blob([buffer], { type: "text/csv;charset=utf-8" })
   const url = URL.createObjectURL(blob)
   return url
-}
-
-// Dentro da função calculateDemandForecast, antes de fazer o cálculo do Prophet
-// Usar as datas atípicas do formulário em vez de buscar do banco de dados
-const holidays = [];
-
-// Processar datas atípicas do formulário
-if (datasAtipicasForm && datasAtipicasForm.length > 0) {
-  console.log('Processando datas atípicas do formulário para o cálculo Prophet');
-  datasAtipicasForm.forEach(periodo => {
-    const dataInicial = new Date(periodo.dataInicial);
-    const dataFinal = new Date(periodo.dataFinal);
-    const descricao = periodo.descricao || 'periodo_atipico';
-    
-    console.log(`Processando período atípico: ${dataInicial} a ${dataFinal} - ${descricao}`);
-    
-    // Adiciona cada dia do período como um holiday
-    const tempDate = new Date(dataInicial);
-    while (tempDate <= dataFinal) {
-      holidays.push({
-        holiday: descricao,
-        ds: new Date(tempDate)
-      });
-      tempDate.setDate(tempDate.getDate() + 1);
-    }
-  });
-  
-  console.log(`Total de dias atípicos processados: ${holidays.length}`);
-} else {
-  // Fallback: buscar do banco de dados se não houver datas no formulário
-  console.log('Nenhuma data atípica encontrada no formulário, buscando do banco de dados...');
-  const { data: datasAtipicas } = await supabase
-    .from('datas_atipicas')
-    .select('data_inicial, data_final');
-
-  if (datasAtipicas && datasAtipicas.length > 0) {
-    datasAtipicas.forEach(periodo => {
-      const dataInicial = new Date(periodo.data_inicial);
-      const dataFinal = new Date(periodo.data_final);
-      
-      // Adiciona cada dia do período como um holiday
-      const tempDate = new Date(dataInicial);
-      while (tempDate <= dataFinal) {
-        holidays.push({
-          holiday: 'periodo_atipico',
-          ds: new Date(tempDate)
-        });
-        tempDate.setDate(tempDate.getDate() + 1);
-      }
-    });
-  }
 }
 
 // Adicione o parâmetro holidays ao criar o modelo Prophet
