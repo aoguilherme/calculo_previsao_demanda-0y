@@ -24,12 +24,12 @@ export default function DashboardPage() {
 
   // Função para formatar data de forma consistente
   const formatDate = (dateString: string) => {
-    if (typeof window === 'undefined') {
-      // No servidor, retornar formato simples
-      return dateString
-    }
-    // No cliente, usar toLocaleDateString
-    return new Date(dateString).toLocaleDateString('pt-BR')
+    if (!dateString) return ''
+    const date = new Date(dateString)
+    const day = date.getDate().toString().padStart(2, '0')
+    const month = (date.getMonth() + 1).toString().padStart(2, '0')
+    const year = date.getFullYear()
+    return `${day}/${month}/${year}`
   }
 
   useEffect(() => {
@@ -170,7 +170,7 @@ export default function DashboardPage() {
                   <Target className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{data.mediaGeral.toLocaleString()}</div>
+                  <div className="text-2xl font-bold">{data.mediaGeral.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}</div>
                   <p className="text-xs text-muted-foreground">Média de todas as previsões</p>
                 </CardContent>
               </Card>
@@ -237,7 +237,7 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-bold text-green-600">{item.media_prevista.toLocaleString()}</p>
+                          <p className="text-lg font-bold text-green-600">{item.media_prevista.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}</p>
                           <p className="text-sm text-gray-500">unidades</p>
                         </div>
                       </div>
@@ -270,129 +270,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-
-// Adicione estes estados no início do componente
-const [datasAtipicas, setDatasAtipicas] = useState<Array<{
-  id: string;
-  data_inicial: string;
-  data_final: string;
-  descricao: string;
-}>>([]);
-const [novaDataInicial, setNovaDataInicial] = useState('');
-const [novaDataFinal, setNovaDataFinal] = useState('');
-const [novaDescricao, setNovaDescricao] = useState('');
-
-// Adicione esta função para carregar as datas atípicas
-const carregarDatasAtipicas = async () => {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from('datas_atipicas')
-    .select('*')
-    .order('data_inicial', { ascending: true });
-
-  if (!error && data) {
-    setDatasAtipicas(data);
-  }
-};
-
-// Adicione esta função para salvar nova data atípica
-const salvarDataAtipica = async () => {
-  if (!novaDataInicial || !novaDataFinal) {
-    alert('Por favor, preencha as datas inicial e final.');
-    return;
-  }
-
-  const supabase = createClient();
-  const { error } = await supabase
-    .from('datas_atipicas')
-    .insert([
-      {
-        data_inicial: novaDataInicial,
-        data_final: novaDataFinal,
-        descricao: novaDescricao
-      }
-    ]);
-
-  if (!error) {
-    setNovaDataInicial('');
-    setNovaDataFinal('');
-    setNovaDescricao('');
-    carregarDatasAtipicas();
-  }
-};
-
-// Adicione esta função para excluir data atípica
-const excluirDataAtipica = async (id: string) => {
-  const supabase = createClient();
-  const { error } = await supabase
-    .from('datas_atipicas')
-    .delete()
-    .eq('id', id);
-
-  if (!error) {
-    carregarDatasAtipicas();
-  }
-};
-
-// Adicione este useEffect para carregar as datas atípicas
-useEffect(() => {
-  carregarDatasAtipicas();
-}, []);
-
-// Adicione este componente antes do Card de pesquisa de SKUs
-<Card className="mb-6">
-  <CardHeader>
-    <CardTitle className="flex items-center gap-2">
-      <Calendar className="h-5 w-5" />
-      Períodos Atípicos
-    </CardTitle>
-  </CardHeader>
-  <CardContent>
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-      <Input
-        type="date"
-        value={novaDataInicial}
-        onChange={(e) => setNovaDataInicial(e.target.value)}
-        placeholder="Data Inicial"
-      />
-      <Input
-        type="date"
-        value={novaDataFinal}
-        onChange={(e) => setNovaDataFinal(e.target.value)}
-        placeholder="Data Final"
-      />
-      <Input
-        type="text"
-        value={novaDescricao}
-        onChange={(e) => setNovaDescricao(e.target.value)}
-        placeholder="Descrição (opcional)"
-      />
-      <Button onClick={salvarDataAtipica}>Adicionar Período</Button>
-    </div>
-
-    <div className="mt-4">
-      <h3 className="text-sm font-semibold mb-2">Períodos Cadastrados:</h3>
-      <div className="space-y-2">
-        {datasAtipicas.map((data) => (
-          <div key={data.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
-            <div>
-              <span className="font-medium">
-                {formatDate(data.data_inicial)} até {formatDate(data.data_final)}
-              </span>
-              {data.descricao && (
-                <span className="ml-2 text-gray-500">- {data.descricao}</span>
-              )}
-            </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => excluirDataAtipica(data.id)}
-            >
-              Excluir
-            </Button>
-          </div>
-        ))}
-      </div>
-    </div>
-  </CardContent>
-</Card>

@@ -5,14 +5,19 @@ import type React from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { X, FileText, BarChart3 } from "lucide-react"
+import { X, FileText, BarChart3, Upload, CheckCircle, Calendar, Plus, Edit2, Trash2, Calculator, ArrowRight, AlertTriangle, AlertCircle } from "lucide-react"
 import { calculateDemandForecast } from "./actions"
 import { useActionState, useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 export default function DemandForecastPage() {
   // Mova todos os estados para dentro do componente
   const [state, action, isPending] = useActionState(calculateDemandForecast, null)
+  const router = useRouter()
+  
+  // Log para debug
+  console.log('🔄 Estado atual:', { state, isPending })
   const [datasAtipicas, setDatasAtipicas] = useState<Array<{
     dataInicial: string;
     dataFinal: string;
@@ -20,63 +25,47 @@ export default function DemandForecastPage() {
   }>>([]) // Inicialize com array vazio
 
   const [novaDataAtipica, setNovaDataAtipica] = useState({
-    dataInicial: '',
-    dataFinal: '',
+    data: '',
     descricao: ''
   })
+  
+  const [dataAtipicaError, setDataAtipicaError] = useState('')
 
-  // Estado para a data atual - inicializado vazio para evitar hidratação
-  const [today, setToday] = useState('')
+  // Removido estado today para evitar hidratação mismatch
 
-  // useEffect para definir a data atual apenas no cliente
-  useEffect(() => {
-    const today = new Date()
-    const day = today.getDate().toString().padStart(2, '0')
-    const month = (today.getMonth() + 1).toString().padStart(2, '0')
-    const year = today.getFullYear()
-    setToday(`${day}/${month}/${year}`)
-  }, [])
-
-  // Função para converter data ISO para formato dd/mm/aaaa
+  // Função para converter data ISO para formato mm/aaaa
   const formatDateToBR = (isoDate: string) => {
     if (!isoDate) return ''
     const date = new Date(isoDate)
-    const day = date.getDate().toString().padStart(2, '0')
     const month = (date.getMonth() + 1).toString().padStart(2, '0')
     const year = date.getFullYear()
-    return `${day}/${month}/${year}`
+    return `${month}/${year}`
   }
 
-  // Função para converter data dd/mm/aaaa para formato ISO
+  // Função para converter data mm/aaaa para formato ISO (primeiro dia do mês)
   const formatDateToISO = (brDate: string) => {
     if (!brDate) return ''
-    const [day, month, year] = brDate.split('/')
-    if (!day || !month || !year) return ''
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+    const [month, year] = brDate.split('/')
+    if (!month || !year) return ''
+    return `${year}-${month.padStart(2, '0')}-01`
   }
 
-  // Valores padrão - inicializados com valores estáticos para evitar hidratação
-  const defaultValues = {
-    dataInicio: "01/01/2024",
-    dataFim: "31/12/2024",
-    diasPrevisao: "30",
+  // Valores padrão - inicializados com valores estáticos para evitar hidratação (formato mm/aaaa)
+  const defaultValues = 
+  {
+    dataInicio: "01/2024",
+    dataFim: "12/2024",
+    diasPrevisao: "1"
   }
 
   // Estados para controlar os valores dos campos
   const [fieldValues, setFieldValues] = useState(defaultValues)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [showResultPopup, setShowResultPopup] = useState(false)
+  const [csvData, setCsvData] = useState<Array<{data: Date, sku: string, familia: string, vendas: number}>>([]) // Dados do CSV processados
 
-  // Atualizar fieldValues quando today for definido
-  useEffect(() => {
-    if (today) {
-      setFieldValues(prev => ({
-        ...prev,
-        dataInicio: today,
-        dataFim: today
-      }))
-    }
-  }, [today])
+  const [showResultPopup, setShowResultPopup] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState('')
 
   // Controlar popup de resultados
   useEffect(() => {
@@ -87,41 +76,81 @@ export default function DemandForecastPage() {
 
   // Função para formatar data de forma consistente
   const formatDate = (dateString: string) => {
-    // Se já está no formato dd/mm/aaaa, retorna como está
-    if (dateString.includes('/') && dateString.length === 10) {
+    // Se já está no formato mm/aaaa, retorna como está
+    if (dateString.includes('/')) {
       return dateString
     }
-    // Caso contrário, converte de ISO para dd/mm/aaaa
-    const date = new Date(dateString)
-    const day = date.getDate().toString().padStart(2, '0')
-    const month = (date.getMonth() + 1).toString().padStart(2, '0')
-    const year = date.getFullYear()
-    return `${day}/${month}/${year}`
+    // Caso contrário, converte de ISO para mm/aaaa
+    return formatDateToBR(dateString)
   }
 
   // Adicione estas funções para gerenciar as datas atípicas
   const adicionarDataAtipica = () => {
-    if (!novaDataAtipica.dataInicial || !novaDataAtipica.dataFinal) {
-      alert('Por favor, preencha as datas inicial e final do período atípico.');
+    // Limpar erro anterior
+    setDataAtipicaError('');
+    
+    if (!novaDataAtipica.data) {
+      setDataAtipicaError('Formato e/ou valor de data incorreto!');
       return;
     }
 
-    // Converter datas para comparação
-    const dataInicialISO = formatDateToISO(novaDataAtipica.dataInicial)
-    const dataFinalISO = formatDateToISO(novaDataAtipica.dataFinal)
-    
-    if (!dataInicialISO || !dataFinalISO) {
-      alert('Por favor, insira datas válidas no formato dd/mm/aaaa.');
+    // Validar formato mm/aaaa
+    const formatoRegex = /^(0[1-9]|1[0-2])\/\d{4}$/;
+    if (!formatoRegex.test(novaDataAtipica.data)) {
+      setDataAtipicaError('Formato e/ou valor de data incorreto!');
       return;
     }
+
+    // Extrair mês e ano
+    const [mes, ano] = novaDataAtipica.data.split('/');
+    const mesNum = parseInt(mes, 10);
+    const anoNum = parseInt(ano, 10);
+
+    // Validar valores
+    if (mesNum < 1 || mesNum > 12) {
+      setDataAtipicaError('Formato e/ou valor de data incorreto!');
+      return;
+    }
+
+    if (anoNum < 1900 || anoNum > 2100) {
+      setDataAtipicaError('Formato e/ou valor de data incorreto!');
+      return;
+    }
+
+    // Verificar se a data já existe na lista
+    const dataJaExiste = datasAtipicas.some(item => item.data === novaDataAtipica.data);
+    if (dataJaExiste) {
+      setDataAtipicaError('Formato e/ou valor de data incorreto!');
+      return;
+    }
+
+    // Verificar se a data existe no arquivo de vendas anexado
+    if (csvData.length > 0) {
+      const [mes, ano] = novaDataAtipica.data.split('/');
+      const mesNum = parseInt(mes, 10);
+      const anoNum = parseInt(ano, 10);
+      
+      const dataExisteNaPlanilha = csvData.some(registro => {
+        const dataRegistro = registro.data;
+        return dataRegistro.getMonth() + 1 === mesNum && dataRegistro.getFullYear() === anoNum;
+      });
+      
+      if (!dataExisteNaPlanilha) {
+        setDataAtipicaError('Data inexistente na planilha de vendas!');
+        return;
+      }
+    }
+
+    // Converter data para validação adicional
+    const dataISO = formatDateToISO(novaDataAtipica.data);
     
-    if (new Date(dataInicialISO) > new Date(dataFinalISO)) {
-      alert('A data inicial deve ser anterior à data final.');
+    if (!dataISO) {
+      setDataAtipicaError('Formato e/ou valor de data incorreto!');
       return;
     }
 
     setDatasAtipicas([...datasAtipicas, novaDataAtipica]);
-    setNovaDataAtipica({ dataInicial: '', dataFinal: '', descricao: '' });
+    setNovaDataAtipica({ data: '', descricao: '' });
   };
 
   const removerDataAtipica = (index: number) => {
@@ -142,420 +171,719 @@ export default function DemandForecastPage() {
     const currentValue = fieldValues[field as keyof typeof fieldValues]
     // Para campos de data, verificar se é diferente de hoje
     if (field === 'dataInicio' || field === 'dataFim') {
-      return currentValue !== today
+      return currentValue !== defaultValues[field as keyof typeof defaultValues]
     }
     // Para outros campos, verificar se é diferente do valor padrão
     return currentValue !== defaultValues[field as keyof typeof defaultValues]
   }
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file && file.type === "text/csv") {
       setSelectedFile(file)
+      // Processar o arquivo CSV para extrair as datas
+      await processarCSV(file)
     } else {
       alert("Por favor, selecione um arquivo CSV válido.")
       event.target.value = ""
     }
   }
 
+  // Função para processar o CSV e extrair as datas
+  const processarCSV = async (file: File) => {
+    try {
+      const csvText = await file.text()
+      const lines = csvText.trim().split("\n")
+      const dados: Array<{data: Date, sku: string, familia: string, vendas: number}> = []
+      
+      // Pular cabeçalho (primeira linha)
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim()
+        if (!line) continue
+        
+        const parts = line.split(';').map(part => part.trim())
+        if (parts.length >= 4) {
+          const [dataStr, sku, familia, vendasStr] = parts
+          
+          // Converter data para objeto Date
+          const dataVenda = new Date(dataStr)
+          const vendas = Number.parseInt(vendasStr)
+          
+          if (!isNaN(dataVenda.getTime()) && !isNaN(vendas)) {
+            dados.push({
+              data: dataVenda,
+              sku: sku,
+              familia: familia,
+              vendas: vendas
+            })
+          }
+        }
+      }
+      
+      setCsvData(dados)
+      console.log('📊 Dados do CSV processados:', dados.length, 'registros')
+    } catch (error) {
+      console.error('Erro ao processar CSV:', error)
+      setCsvData([])
+    }
+  }
+
+
+
   const removeFile = () => {
     setSelectedFile(null)
+    setCsvData([]) // Limpar dados do CSV também
     // Reset file input value
     const fileInput = document.getElementById("csvFile") as HTMLInputElement
     if (fileInput) fileInput.value = ""
   }
 
-  return (
-    <div className="min-h-screen bg-gray-200">
-      {/* Header */}
-      <div className="bg-slate-800 text-white px-6 py-4 flex justify-between items-center">
-        <h1 className="text-xl font-semibold">Cálculo Previsão de Demanda</h1>
-        <div className="flex items-center gap-2 text-sm">
-          <span>Para sair do modo de ecrã inteiro, prima</span>
-          <kbd className="px-2 py-1 bg-slate-700 border border-slate-600 rounded text-xs">Esc</kbd>
-        </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="flex items-center justify-center min-h-[calc(100vh-120px)] p-4">
-        <Card className="w-full max-w-4xl bg-white shadow-lg">
-          <CardHeader className="text-center py-4">
-            <CardTitle className="text-slate-700 text-3xl font-bold">Preencha os Dados</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <form action={action} className="space-y-4">
-              {/* Upload do arquivo CSV */}
-              <div className="space-y-2">
-                <Label htmlFor="csvFile" className="text-slate-700 font-medium">
-                  Arquivo de Vendas (CSV) <span className="text-red-500">*</span>
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="csvFile"
-                    name="csvFile"
-                    type="file"
-                    accept=".csv"
-                    required
-                    className="bg-gray-50 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100"
-                    onChange={handleFileChange}
-                  />
-                  {selectedFile && (
-                    <div className="mt-2 flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-green-600" />
-                        <span className="text-sm text-green-700">{selectedFile.name}</span>
+
+  return (
+    <div className="h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex flex-col overflow-hidden">
+      {/* Compact Header */}
+      <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 shadow-xl flex-shrink-0">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                <BarChart3 className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-white tracking-tight">Previsão de Demanda</h1>
+                <p className="text-slate-300 text-xs">Sistema Inteligente de Análise Preditiva</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-slate-300">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-xs">Online</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content - Single Page Layout */}
+      <main className="flex-1 container mx-auto px-4 py-4 overflow-hidden">
+        <div className="h-full max-w-7xl mx-auto">
+          {/* Main Form Card - Full Height */}
+          <Card className="h-full bg-white/90 backdrop-blur-sm shadow-xl border-0 rounded-2xl overflow-hidden flex flex-col">
+            <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-3 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-white text-lg font-bold flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    Configuração da Análise
+                  </CardTitle>
+                  <p className="text-slate-300 text-sm mt-1">Preencha os dados necessários para iniciar o processamento</p>
+                </div>
+                <Link href="/analise-dados">
+                  <Button 
+                    type="button"
+                    variant="outline" 
+                    size="sm"
+                    className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/30 transition-all duration-200"
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Análise de Dados
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          <CardContent className="flex-1 p-4 overflow-hidden">
+            <form action={action} className="h-full flex flex-col">
+              {/* Compact Grid Layout */}
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden">
+                
+                {/* Left Column - Upload & Dates */}
+                <div className="space-y-4">
+                  {/* Upload Section - Histórico de Vendas */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 bg-blue-500 rounded-lg flex items-center justify-center">
+                        <FileText className="w-4 h-4 text-white" />
+                      </div>
+                      <Label htmlFor="csvFile" className="text-sm font-semibold text-slate-800">
+                        Anexar histórico de vendas <span className="text-red-500">*</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        id="csvFile"
+                        name="csvFile"
+                        type="file"
+                        accept=".csv"
+                        required
+                        className="flex-1 h-9 text-xs border-2 border-dashed border-blue-300 bg-white/50 hover:border-blue-400 transition-colors file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700"
+                        onChange={handleFileChange}
+                      />
+                      {selectedFile && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={removeFile}
+                          className="h-9 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          title="Remover arquivo"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                    {selectedFile && (
+                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-xs text-green-700 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          {selectedFile.name}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upload Section - Média dos Itens */}
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 bg-green-500 rounded-lg flex items-center justify-center">
+                        <FileText className="w-4 h-4 text-white" />
+                      </div>
+                      <Label htmlFor="csvMediaFile" className="text-sm font-semibold text-slate-800">
+                        Anexar média dos itens
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        id="csvMediaFile"
+                        name="csvMediaFile"
+                        type="file"
+                        accept=".csv"
+                        className="flex-1 h-9 text-xs border-2 border-dashed border-green-300 bg-white/50 hover:border-green-400 transition-colors file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700"
+                      />
+                    </div>
+                  </div>
+
+
+
+                  {/* Date Configuration */}
+                  <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-4 border border-slate-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 bg-slate-600 rounded-lg flex items-center justify-center">
+                        <Calendar className="w-4 h-4 text-white" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-slate-800">Período de Análise</h3>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <Label htmlFor="dataInicio" className="text-xs font-medium text-slate-700">
+                          Data Início <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id="dataInicio"
+                            name="dataInicio"
+                            type="text"
+                            required
+                            className={`h-8 text-xs bg-white border transition-all duration-200 pr-6 ${
+                              isFieldEdited("dataInicio") 
+                                ? 'border-blue-400 bg-blue-50' 
+                                : 'border-slate-200 hover:border-slate-300'
+                            }`}
+                            placeholder="mm/aaaa"
+                            value={fieldValues.dataInicio}
+                            onChange={(e) => {
+                              let value = e.target.value.replace(/\D/g, '')
+                              if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2,6)
+                              handleFieldChange("dataInicio", value)
+                            }}
+                            maxLength={7}
+                          />
+                          {isFieldEdited("dataInicio") && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-gray-200"
+                              onClick={() => resetField("dataInicio")}
+                              title="Resetar"
+                            >
+                              <X className="h-2 w-2 text-gray-500" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="dataFim" className="text-xs font-medium text-slate-700">
+                          Data Fim <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id="dataFim"
+                            name="dataFim"
+                            type="text"
+                            required
+                            className={`h-8 text-xs bg-white border transition-all duration-200 pr-6 ${
+                              isFieldEdited("dataFim") 
+                                ? 'border-indigo-400 bg-indigo-50' 
+                                : 'border-slate-200 hover:border-slate-300'
+                            }`}
+                            placeholder="mm/aaaa"
+                            value={fieldValues.dataFim}
+                            onChange={(e) => {
+                              let value = e.target.value.replace(/\D/g, '')
+                              if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2,6)
+                              handleFieldChange("dataFim", value)
+                            }}
+                            maxLength={7}
+                          />
+                          {isFieldEdited("dataFim") && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-gray-200"
+                              onClick={() => resetField("dataFim")}
+                              title="Resetar"
+                            >
+                              <X className="h-2 w-2 text-gray-500" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="diasPrevisao" className="text-xs font-medium text-slate-700">
+                          Meses Previsão <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id="diasPrevisao"
+                            name="diasPrevisao"
+                            type="number"
+                            required
+                            className={`h-8 text-xs bg-white border transition-all duration-200 pr-6 ${
+                              isFieldEdited("diasPrevisao") 
+                                ? 'border-green-400 bg-green-50' 
+                                : 'border-slate-200 hover:border-slate-300'
+                            }`}
+                            value={fieldValues.diasPrevisao}
+                            min="1"
+                            max="24"
+                            onChange={(e) => handleFieldChange("diasPrevisao", e.target.value)}
+                          />
+                          {isFieldEdited("diasPrevisao") && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-gray-200"
+                              onClick={() => resetField("diasPrevisao")}
+                              title="Resetar"
+                            >
+                              <X className="h-2 w-2 text-gray-500" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Middle Column - Atypical Dates */}
+                <div className="space-y-4">
+                  {/* Add New Atypical Date */}
+                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 bg-amber-500 rounded-lg flex items-center justify-center">
+                        <Plus className="w-4 h-4 text-white" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-slate-800">Datas Atípicas</h3>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div>
+                        <Label className="text-xs font-medium text-slate-600">Data</Label>
+                        <Input
+                          type="text"
+                          placeholder="mm/aaaa"
+                          value={novaDataAtipica.data}
+                          onChange={(e) => {
+                            let value = e.target.value.replace(/\D/g, '')
+                            if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2,6)
+                            setNovaDataAtipica({ ...novaDataAtipica, data: value })
+                            // Limpar erro quando usuário começar a digitar
+                            if (dataAtipicaError) setDataAtipicaError('')
+                          }}
+                          maxLength={7}
+                          className={`h-8 text-xs border-amber-200 focus:border-amber-400 bg-amber-50/50 ${
+                            dataAtipicaError ? 'border-red-300 focus:border-red-400' : ''
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium text-slate-600">Descrição</Label>
+                        <Input
+                          type="text"
+                          placeholder="Ex: Aumento de Preço"
+                          value={novaDataAtipica.descricao}
+                          onChange={(e) => setNovaDataAtipica({ ...novaDataAtipica, descricao: e.target.value })}
+                          className="h-8 text-xs border-amber-200 focus:border-amber-400 bg-amber-50/50"
+                        />
                       </div>
                       <Button
                         type="button"
-                        variant="ghost"
+                        onClick={adicionarDataAtipica}
                         size="sm"
-                        className="h-6 w-6 p-0 hover:bg-green-100"
-                        onClick={removeFile}
-                        title="Remover arquivo"
+                        className="w-full h-8 text-xs bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors"
+                        disabled={!novaDataAtipica.data}
                       >
-                        <X className="h-3 w-3 text-green-600" />
+                        <Plus className="h-3 w-3 mr-1" />
+                        Adicionar
                       </Button>
+                      
+                      {/* Exibição de erro */}
+                      {dataAtipicaError && (
+                        <div className="bg-gradient-to-br from-red-50 to-rose-50 border border-red-200 rounded-lg p-2 mt-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-4 h-4 bg-red-500 rounded flex items-center justify-center">
+                                <X className="w-2.5 h-2.5 text-white" />
+                              </div>
+                              <p className="text-xs text-red-700 font-medium">{dataAtipicaError}</p>
+                            </div>
+                            <button
+                              onClick={() => setDataAtipicaError('')}
+                              className="w-4 h-4 flex items-center justify-center hover:bg-red-200 rounded transition-colors"
+                              title="Fechar"
+                            >
+                              <X className="w-2.5 h-2.5 text-red-600" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500">
-                  Formato esperado: Data;SKU;Vendas (separado por ponto e vírgula)
-                </p>
-              </div>
+                  </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="dataInicio" className="text-slate-700 font-medium">
-                    Data Analise Inicio <span className="text-red-500">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="dataInicio"
-                      name="dataInicio"
-                      type="text"
-                      required
-                      className="bg-gray-50 pr-8 text-sm"
-                      placeholder="dd/mm/aaaa"
-                      value={fieldValues.dataInicio}
-                      onChange={(e) => {
-                        let value = e.target.value.replace(/\D/g, '')
-                        if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2)
-                        if (value.length >= 5) value = value.slice(0,5) + '/' + value.slice(5,9)
-                        handleFieldChange("dataInicio", value)
-                      }}
-                      maxLength={10}
-                    />
-                    {isFieldEdited("dataInicio") && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 p-0 hover:bg-gray-200"
-                        onClick={() => resetField("dataInicio")}
-                        title="Resetar para valor padrão"
-                      >
-                        <X className="h-3 w-3 text-gray-500" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dataFim" className="text-slate-700 font-medium">
-                    Data Analise Fim <span className="text-red-500">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="dataFim"
-                      name="dataFim"
-                      type="text"
-                      required
-                      className="bg-gray-50 pr-8 text-sm"
-                      placeholder="dd/mm/aaaa"
-                      value={fieldValues.dataFim}
-                      onChange={(e) => {
-                        let value = e.target.value.replace(/\D/g, '')
-                        if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2)
-                        if (value.length >= 5) value = value.slice(0,5) + '/' + value.slice(5,9)
-                        handleFieldChange("dataFim", value)
-                      }}
-                      maxLength={10}
-                    />
-                    {isFieldEdited("dataFim") && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 p-0 hover:bg-gray-200"
-                        onClick={() => resetField("dataFim")}
-                        title="Resetar para valor padrão (hoje)"
-                      >
-                        <X className="h-3 w-3 text-gray-500" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="diasPrevisao" className="text-slate-700 font-medium">
-                    Dias Previsão <span className="text-red-500">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="diasPrevisao"
-                      name="diasPrevisao"
-                      type="number"
-                      required
-                      className="bg-gray-50 pr-8"
-                      value={fieldValues.diasPrevisao}
-                      min="1"
-                      max="365"
-                      onChange={(e) => handleFieldChange("diasPrevisao", e.target.value)}
-                    />
-                    {isFieldEdited("diasPrevisao") && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 p-0 hover:bg-gray-200"
-                        onClick={() => resetField("diasPrevisao")}
-                        title="Resetar para valor padrão (30 dias)"
-                      >
-                        <X className="h-3 w-3 text-gray-500" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-7 gap-4">
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="dataInicialAtipica" className="text-slate-700 font-medium">Data Atípica Inicio</Label>
-                  <Input
-                    id="dataInicialAtipica"
-                    type="text"
-                    className="bg-gray-50"
-                    placeholder="dd/mm/aaaa"
-                    value={novaDataAtipica.dataInicial}
-                    onChange={(e) => {
-                      let value = e.target.value.replace(/\D/g, '')
-                      if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2)
-                      if (value.length >= 5) value = value.slice(0,5) + '/' + value.slice(5,9)
-                      setNovaDataAtipica({ ...novaDataAtipica, dataInicial: value })
-                    }}
-                    maxLength={10}
-                  />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="dataFinalAtipica" className="text-slate-700 font-medium">Data Atípica Fim</Label>
-                  <Input
-                    id="dataFinalAtipica"
-                    type="text"
-                    className="bg-gray-50"
-                    placeholder="dd/mm/aaaa"
-                    value={novaDataAtipica.dataFinal}
-                    onChange={(e) => {
-                      let value = e.target.value.replace(/\D/g, '')
-                      if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2)
-                      if (value.length >= 5) value = value.slice(0,5) + '/' + value.slice(5,9)
-                      setNovaDataAtipica({ ...novaDataAtipica, dataFinal: value })
-                    }}
-                    maxLength={10}
-                  />
-                </div>
-                <div className="col-span-3 space-y-2">
-                  <Label htmlFor="descricaoAtipica" className="text-slate-700 font-medium">Descrição</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="descricaoAtipica"
-                      type="text"
-                      className="bg-gray-50 flex-grow"
-                      placeholder="Ex: Black Friday"
-                      value={novaDataAtipica.descricao}
-                      onChange={(e) => setNovaDataAtipica({ ...novaDataAtipica, descricao: e.target.value })}
-                    />
-                    <Button
-                      type="button"
-                      onClick={adicionarDataAtipica}
-                      className="whitespace-nowrap px-3"
-                      title="Adicionar à tabela de datas atípicas"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                      </svg>
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              {datasAtipicas.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  <Label className="text-sm text-gray-600">Períodos cadastrados:</Label>
-                  <div className="max-h-[120px] overflow-y-auto border border-gray-200 rounded-lg">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
-                          <th className="px-4 py-2 text-left font-medium text-gray-600">Período</th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-600">Descrição</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-600">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody>
+                  {/* List of Atypical Dates */}
+                  {datasAtipicas.length > 0 && (
+                    <div className="bg-white rounded-xl border border-amber-100 shadow-sm overflow-hidden">
+                      <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2">
+                        <h4 className="text-white text-xs font-semibold flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          Cadastradas ({datasAtipicas.length})
+                        </h4>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto">
                         {datasAtipicas.map((data, index) => (
-                          <tr key={index} className="border-t border-gray-200 hover:bg-gray-50">
-                            <td className="px-4 py-3">
-                              <span className="font-medium">
-                                {formatDate(data.dataInicial)} até {formatDate(data.dataFinal)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-500">
-                              {data.descricao || '-'}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="flex justify-end gap-2">
+                          <div key={index} className="px-3 py-2 border-b border-amber-50 last:border-b-0 hover:bg-amber-50/50 transition-colors">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs text-slate-700 font-medium truncate">
+                                  {formatDate(data.data)}
+                                </div>
+                                <div className="text-xs text-slate-500 truncate">
+                                  {data.descricao || '-'}
+                                </div>
+                              </div>
+                              <div className="flex gap-1 ml-2">
                                 <Button
                                   type="button"
-                                  variant="outline"
+                                  variant="ghost"
                                   size="sm"
                                   onClick={() => {
                                     setNovaDataAtipica({
-                                      dataInicial: data.dataInicial,
-                                      dataFinal: data.dataFinal,
+                                      data: data.data,
                                       descricao: data.descricao || ''
                                     });
                                     removerDataAtipica(index);
                                   }}
+                                  className="h-6 w-6 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                                   title="Editar"
                                 >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
+                                  <Edit2 className="w-3 h-3" />
                                 </Button>
                                 <Button
                                   type="button"
-                                  variant="destructive"
+                                  variant="ghost"
                                   size="sm"
                                   onClick={() => removerDataAtipica(index)}
+                                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                                   title="Excluir"
                                 >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
+                                  <Trash2 className="w-3 h-3" />
                                 </Button>
                               </div>
-                            </td>
-                          </tr>
+                            </div>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column - Calculate Button & Info */}
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-br from-slate-800 to-slate-700 rounded-xl p-4">
+                    <div className="text-center mb-3">
+                      <h3 className="text-white text-sm font-semibold mb-1">Pronto para Calcular?</h3>
+                      <p className="text-slate-300 text-xs">Clique para iniciar o processamento</p>
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={isPending || !selectedFile}
+                      size="lg"
+                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none"
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <Calculator className="h-4 w-4" />
+                        <span className="text-sm">{isPending ? "Calculando..." : "Calcular Previsão"}</span>
+                        {!isPending && <ArrowRight className="h-3 w-3" />}
+                      </div>
+                    </Button>
+                  </div>
+
+                  {/* Info Panel - Formato do Arquivo de Vendas */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-5 h-5 bg-blue-500 rounded-lg flex items-center justify-center">
+                        <AlertTriangle className="w-3 h-3 text-white" />
+                      </div>
+                      <h4 className="text-xs font-semibold text-slate-800">Formato do Arquivo de Vendas</h4>
+                    </div>
+                    <div className="text-xs text-slate-600 space-y-1">
+                      <p>• Formato: CSV</p>
+                      <p>• Separador: ponto e vírgula (;)</p>
+                      <p>• Colunas: Data; SKU; Familia; Vendas</p>
+                      <p>• Data: mm/aaaa</p>
+                    </div>
+                  </div>
+
+                  {/* Info Panel - Formato do Arquivo de Médias */}
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-5 h-5 bg-green-500 rounded-lg flex items-center justify-center">
+                        <AlertTriangle className="w-3 h-3 text-white" />
+                      </div>
+                      <h4 className="text-xs font-semibold text-slate-800">Formato do Arquivo de Médias</h4>
+                    </div>
+                    <div className="text-xs text-slate-600 space-y-1">
+                      <p>• Formato: CSV</p>
+                      <p>• Separador: ponto e vírgula (;)</p>
+                      <p>• Colunas: sku; fml_item; media_prevista; dt_implant</p>
+                      <p>• Data: aaaa/mm/dd</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-red-50 to-rose-50 rounded-xl p-4 border border-red-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-5 h-5 bg-red-500 rounded-lg flex items-center justify-center">
+                        <CheckCircle className="w-3 h-3 text-white" />
+                      </div>
+                      <h4 className="text-xs font-semibold text-slate-800">Dicas</h4>
+                    </div>
+                    <div className="text-xs text-slate-600 space-y-1">
+                      <p>• Use dados históricos de pelo menos 12 meses</p>
+                      <p>• Datas atípicas são opcionais</p>
+                      <p>• Máximo 24 meses de previsão</p>
+                    </div>
                   </div>
                 </div>
-              )}
+              </div>
 
+              {/* Campos hidden para enviar valores controlados */}
+              <input
+                type="hidden"
+                name="dataInicio"
+                value={fieldValues.dataInicio}
+              />
+              <input
+                type="hidden"
+                name="dataFim"
+                value={fieldValues.dataFim}
+              />
+              <input
+                type="hidden"
+                name="diasPrevisao"
+                value={fieldValues.diasPrevisao}
+              />
               <input
                 type="hidden"
                 name="datasAtipicas"
                 value={JSON.stringify(datasAtipicas)}
               />
-
-              <div className="flex justify-center pt-3">
-                <Button
-                  type="submit"
-                  disabled={isPending || !selectedFile}
-                  className="bg-slate-600 hover:bg-slate-700 text-white px-8 py-2 disabled:opacity-50"
-                >
-                  {isPending ? "Calculando..." : "Calcular"}
-                </Button>
-              </div>
             </form>
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </main>
 
-      {/* Footer */}
-      <div className="bg-slate-800 text-white text-center py-2 text-sm">
-        © 2025 Cálculo Média Mês. Todos os direitos reservados.
-      </div>
+      {/* Modern Footer */}
+      <footer className="flex-shrink-0 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-t border-slate-700">
+        <div className="container mx-auto px-6 py-3">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                <BarChart3 className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <p className="text-white font-semibold text-sm">Sistema de Previsão de Demanda</p>
+                <p className="text-slate-400 text-xs">Tecnologia avançada para análise preditiva</p>
+              </div>
+            </div>
+            <div className="text-slate-400 text-xs text-center lg:text-right">
+              <p>© 2025 Todos os direitos reservados.</p>
+              <p className="text-xs mt-1">Desenvolvido com tecnologia de ponta</p>
+            </div>
+          </div>
+        </div>
+      </footer>
 
-      {/* Popup de Resultados */}
+      {/* Compact Results Popup */}
       {showResultPopup && state && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 relative">
-            {/* Botão X para fechar */}
-            <button
-              onClick={() => setShowResultPopup(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-xl font-bold"
-            >
-              ×
-            </button>
-            
-            {state.success ? (
-              <div className="text-green-600">
-                <h3 className="text-lg font-medium mb-3">✓ Cálculo concluído com sucesso!</h3>
-                <p className="text-sm mb-2">{state.processedSkus} SKUs processados.</p>
-                {state.details && (
-                  <div className="mb-4 text-xs text-gray-600">
-                    <p>Total de registros analisados: {state.details.totalRecords}</p>
-                    <p>Período analisado: {state.details.dateRange}</p>
-                    {state.details.statistics && (
-                      <>
-                        <p>Média diária de vendas: {state.details.statistics.mediaDiariaVendas}</p>
-                        <p>Intervalo em anos: {state.details.statistics.intervaloAnos}</p>
-                        <p>SKUs únicos: {state.details.statistics.skusUnicos}</p>
-                      </>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
+          <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[85vh] overflow-hidden animate-in slide-in-from-bottom-4 duration-300 flex flex-col">
+            {/* Header */}
+            <div className={`px-4 py-3 flex-shrink-0 ${
+              state.success 
+                ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                : 'bg-gradient-to-r from-red-500 to-rose-500'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                    {state.success ? (
+                      <BarChart3 className="w-5 h-5 text-white" />
+                    ) : (
+                      <X className="w-5 h-5 text-white" />
                     )}
                   </div>
-                )}
-                {state.downloadUrl && (
-                  <div className="mt-4">
-                    <Button
-                      onClick={() => {
-                        // Create download link
-                        if (state.downloadUrl) {
-                          const link = document.createElement("a")
-                          link.href = state.downloadUrl
-                          link.download = state.filename || "previsao_calculada.csv"
-                          link.click()
-                        }
-                        
-                        // Fechar popup e resetar campos
-                        setShowResultPopup(false)
-                        
-                        // Resetar todos os campos
-                         setFieldValues({
-                           dataInicio: today || "01/01/2024",
-                           dataFim: today || "31/12/2024",
-                           diasPrevisao: "30"
-                         })
-                        
-                        // Resetar arquivo selecionado
-                        setSelectedFile(null)
-                        
-                        // Resetar datas atípicas
-                        setDatasAtipicas([])
-                        setNovaDataAtipica({
-                          dataInicial: '',
-                          dataFinal: '',
-                          descricao: ''
-                        })
-                        
-                        // Resetar input de arquivo
-                        const fileInput = document.getElementById('csvFile') as HTMLInputElement
-                        if (fileInput) {
-                          fileInput.value = ''
-                        }
-                      }}
-                      className="bg-green-600 hover:bg-green-700 text-white w-full"
-                    >
-                      📊 Baixar Planilha de Resultados
-                    </Button>
+                  <div>
+                    <h2 className="text-lg font-bold text-white">
+                      {state.success ? 'Cálculo Concluído!' : 'Erro no Processamento'}
+                    </h2>
+                    <p className="text-white/80 text-xs">
+                      {state.success ? 'Previsão gerada com sucesso' : 'Ocorreu um problema durante o cálculo'}
+                    </p>
                   </div>
-                )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowResultPopup(false)}
+                  className="text-white/80 hover:text-white hover:bg-white/20 rounded-lg h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
-            ) : (
-              <div className="text-red-600">
-                <h3 className="text-lg font-medium mb-3">✗ Erro no cálculo</h3>
-                <p className="text-sm">{state.error}</p>
-              </div>
-            )}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 p-4 overflow-y-auto">
+              {state.success ? (
+                <div className="flex flex-col space-y-4">
+                  {/* Success Summary */}
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-5 h-5 bg-green-500 rounded flex items-center justify-center">
+                        <BarChart3 className="w-3 h-3 text-white" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-green-800">Processamento Concluído</h3>
+                    </div>
+                    <p className="text-sm text-green-700 mb-2">A previsão de demanda foi calculada com sucesso e está pronta para download.</p>
+                    <p className="text-sm text-green-600 font-medium">{state.processedSkus} SKUs processados.</p>
+                  </div>
+                  
+                  {/* Details Section */}
+                  {state.details && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2 mb-2">
+                        <FileText className="w-4 h-4" />
+                        Detalhes do Processamento
+                      </h3>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                        <div className="text-sm space-y-1">
+                          <p className="text-slate-700"><span className="font-medium">Total de registros:</span> {state.details.totalRecords}</p>
+                          <p className="text-slate-700"><span className="font-medium">Período analisado:</span> {state.details.dateRange}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Additional Info */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-4 h-4 bg-blue-500 rounded flex items-center justify-center">
+                        <CheckCircle className="w-3 h-3 text-white" />
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-800">Informações</h4>
+                    </div>
+                    <div className="text-sm text-slate-600 space-y-1">
+                      <p>• Arquivo processado com sucesso</p>
+                      <p>• Previsão calculada usando algoritmos avançados (Prophet + SARIMA)</p>
+                      <p>• Resultados prontos para análise</p>
+                    </div>
+                  </div>
+                  
+                  {/* Download Section */}
+                  {state.downloadUrl && (
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4 text-center">
+                      <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mx-auto mb-2">
+                        <FileText className="w-4 h-4 text-white" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-slate-800 mb-2">Exportação e Salvamento</h3>
+                      <p className="text-sm text-slate-600 mb-3">Ir para análise de dados para revisar e salvar</p>
+                      <Button
+                        onClick={() => {
+                          // Salvar os dados do cálculo no sessionStorage
+                          if (state.resultados && state.dataCalculo) {
+                            const dadosCalculo = {
+                              resultados: state.resultados,
+                              dataCalculo: state.dataCalculo,
+                              downloadUrl: state.downloadUrl,
+                              filename: state.filename
+                            }
+                            sessionStorage.setItem('dadosCalculo', JSON.stringify(dadosCalculo))
+                          }
+                          
+                          // Navegar para a página de análise de dados
+                          router.push('/analise-dados')
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-medium text-sm rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all duration-300 shadow-md hover:shadow-lg"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                        Exportar
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-4">
+                  <div className="bg-gradient-to-br from-red-50 to-rose-50 border border-red-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-5 h-5 bg-red-500 rounded flex items-center justify-center">
+                        <X className="w-3 h-3 text-white" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-red-800">Erro no Processamento</h3>
+                    </div>
+                    <p className="text-sm text-red-700">Ocorreu um problema durante o cálculo da previsão. Verifique os dados e tente novamente.</p>
+                  </div>
+                  
+                  {state.error && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2 mb-2">
+                        <AlertCircle className="w-4 h-4" />
+                        Detalhes do Erro
+                      </h3>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 max-h-40 overflow-y-auto">
+                        <pre className="text-sm text-red-600 whitespace-pre-wrap font-mono leading-relaxed">{state.error}</pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+
           </div>
         </div>
       )}
