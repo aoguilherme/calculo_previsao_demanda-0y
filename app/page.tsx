@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { X, FileText, BarChart3 } from "lucide-react"
 import { calculateDemandForecast } from "./actions"
-import { useActionState, useState } from "react"
+import { useActionState, useState, useEffect } from "react"
 import Link from "next/link"
 
 export default function DemandForecastPage() {
@@ -25,19 +25,79 @@ export default function DemandForecastPage() {
     descricao: ''
   })
 
-  // Data atual formatada para input date
-  const today = new Date().toISOString().split("T")[0]
+  // Estado para a data atual - inicializado vazio para evitar hidratação
+  const [today, setToday] = useState('')
 
-  // Valores padrão - Data Fim agora é hoje
+  // useEffect para definir a data atual apenas no cliente
+  useEffect(() => {
+    const today = new Date()
+    const day = today.getDate().toString().padStart(2, '0')
+    const month = (today.getMonth() + 1).toString().padStart(2, '0')
+    const year = today.getFullYear()
+    setToday(`${day}/${month}/${year}`)
+  }, [])
+
+  // Função para converter data ISO para formato dd/mm/aaaa
+  const formatDateToBR = (isoDate: string) => {
+    if (!isoDate) return ''
+    const date = new Date(isoDate)
+    const day = date.getDate().toString().padStart(2, '0')
+    const month = (date.getMonth() + 1).toString().padStart(2, '0')
+    const year = date.getFullYear()
+    return `${day}/${month}/${year}`
+  }
+
+  // Função para converter data dd/mm/aaaa para formato ISO
+  const formatDateToISO = (brDate: string) => {
+    if (!brDate) return ''
+    const [day, month, year] = brDate.split('/')
+    if (!day || !month || !year) return ''
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+  }
+
+  // Valores padrão - inicializados com valores estáticos para evitar hidratação
   const defaultValues = {
-    dataInicio: "2024-01-01",
-    dataFim: today,
+    dataInicio: "01/01/2024",
+    dataFim: "31/12/2024",
     diasPrevisao: "30",
   }
 
   // Estados para controlar os valores dos campos
   const [fieldValues, setFieldValues] = useState(defaultValues)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [showResultPopup, setShowResultPopup] = useState(false)
+
+  // Atualizar fieldValues quando today for definido
+  useEffect(() => {
+    if (today) {
+      setFieldValues(prev => ({
+        ...prev,
+        dataInicio: today,
+        dataFim: today
+      }))
+    }
+  }, [today])
+
+  // Controlar popup de resultados
+  useEffect(() => {
+    if (state) {
+      setShowResultPopup(true)
+    }
+  }, [state])
+
+  // Função para formatar data de forma consistente
+  const formatDate = (dateString: string) => {
+    // Se já está no formato dd/mm/aaaa, retorna como está
+    if (dateString.includes('/') && dateString.length === 10) {
+      return dateString
+    }
+    // Caso contrário, converte de ISO para dd/mm/aaaa
+    const date = new Date(dateString)
+    const day = date.getDate().toString().padStart(2, '0')
+    const month = (date.getMonth() + 1).toString().padStart(2, '0')
+    const year = date.getFullYear()
+    return `${day}/${month}/${year}`
+  }
 
   // Adicione estas funções para gerenciar as datas atípicas
   const adicionarDataAtipica = () => {
@@ -46,7 +106,16 @@ export default function DemandForecastPage() {
       return;
     }
 
-    if (new Date(novaDataAtipica.dataInicial) > new Date(novaDataAtipica.dataFinal)) {
+    // Converter datas para comparação
+    const dataInicialISO = formatDateToISO(novaDataAtipica.dataInicial)
+    const dataFinalISO = formatDateToISO(novaDataAtipica.dataFinal)
+    
+    if (!dataInicialISO || !dataFinalISO) {
+      alert('Por favor, insira datas válidas no formato dd/mm/aaaa.');
+      return;
+    }
+    
+    if (new Date(dataInicialISO) > new Date(dataFinalISO)) {
       alert('A data inicial deve ser anterior à data final.');
       return;
     }
@@ -70,7 +139,13 @@ export default function DemandForecastPage() {
   }
 
   const isFieldEdited = (field: string) => {
-    return fieldValues[field as keyof typeof fieldValues] !== defaultValues[field as keyof typeof defaultValues]
+    const currentValue = fieldValues[field as keyof typeof fieldValues]
+    // Para campos de data, verificar se é diferente de hoje
+    if (field === 'dataInicio' || field === 'dataFim') {
+      return currentValue !== today
+    }
+    // Para outros campos, verificar se é diferente do valor padrão
+    return currentValue !== defaultValues[field as keyof typeof defaultValues]
   }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,6 +160,7 @@ export default function DemandForecastPage() {
 
   const removeFile = () => {
     setSelectedFile(null)
+    // Reset file input value
     const fileInput = document.getElementById("csvFile") as HTMLInputElement
     if (fileInput) fileInput.value = ""
   }
@@ -94,31 +170,20 @@ export default function DemandForecastPage() {
       {/* Header */}
       <div className="bg-slate-800 text-white px-6 py-4 flex justify-between items-center">
         <h1 className="text-xl font-semibold">Cálculo Previsão de Demanda</h1>
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard">
-            <Button
-              variant="outline"
-              className="bg-white text-slate-800 border-white hover:bg-gray-100 hover:text-slate-800"
-            >
-              <BarChart3 className="h-4 w-4 mr-2" />
-              Dashboard
-            </Button>
-          </Link>
-          <div className="flex items-center gap-2 text-sm">
-            <span>Para sair do modo de ecrã inteiro, prima</span>
-            <kbd className="px-2 py-1 bg-slate-700 border border-slate-600 rounded text-xs">Esc</kbd>
-          </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span>Para sair do modo de ecrã inteiro, prima</span>
+          <kbd className="px-2 py-1 bg-slate-700 border border-slate-600 rounded text-xs">Esc</kbd>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex items-center justify-center min-h-[calc(100vh-80px)] p-6">
-        <Card className="w-full max-w-2xl bg-white shadow-lg">
-          <CardHeader className="text-center">
-            <CardTitle className="text-slate-700 text-lg font-medium">Preencha os Dados</CardTitle>
+      <div className="flex items-center justify-center min-h-[calc(100vh-120px)] p-4">
+        <Card className="w-full max-w-4xl bg-white shadow-lg">
+          <CardHeader className="text-center py-4">
+            <CardTitle className="text-slate-700 text-3xl font-bold">Preencha os Dados</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <form action={action} className="space-y-6">
+          <CardContent className="space-y-4">
+            <form action={action} className="space-y-4">
               {/* Upload do arquivo CSV */}
               <div className="space-y-2">
                 <Label htmlFor="csvFile" className="text-slate-700 font-medium">
@@ -167,12 +232,18 @@ export default function DemandForecastPage() {
                     <Input
                       id="dataInicio"
                       name="dataInicio"
-                      type="date"
+                      type="text"
                       required
                       className="bg-gray-50 pr-8 text-sm"
+                      placeholder="dd/mm/aaaa"
                       value={fieldValues.dataInicio}
-                      max={today}
-                      onChange={(e) => handleFieldChange("dataInicio", e.target.value)}
+                      onChange={(e) => {
+                        let value = e.target.value.replace(/\D/g, '')
+                        if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2)
+                        if (value.length >= 5) value = value.slice(0,5) + '/' + value.slice(5,9)
+                        handleFieldChange("dataInicio", value)
+                      }}
+                      maxLength={10}
                     />
                     {isFieldEdited("dataInicio") && (
                       <Button
@@ -196,12 +267,18 @@ export default function DemandForecastPage() {
                     <Input
                       id="dataFim"
                       name="dataFim"
-                      type="date"
+                      type="text"
                       required
                       className="bg-gray-50 pr-8 text-sm"
+                      placeholder="dd/mm/aaaa"
                       value={fieldValues.dataFim}
-                      max={today}
-                      onChange={(e) => handleFieldChange("dataFim", e.target.value)}
+                      onChange={(e) => {
+                        let value = e.target.value.replace(/\D/g, '')
+                        if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2)
+                        if (value.length >= 5) value = value.slice(0,5) + '/' + value.slice(5,9)
+                        handleFieldChange("dataFim", value)
+                      }}
+                      maxLength={10}
                     />
                     {isFieldEdited("dataFim") && (
                       <Button
@@ -250,28 +327,42 @@ export default function DemandForecastPage() {
               </div>
               
               <div className="grid grid-cols-7 gap-4">
-                <div className="col-span-2">
-                  <Label htmlFor="dataInicialAtipica" className="text-sm text-gray-600">Data Atípica Inicio</Label>
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="dataInicialAtipica" className="text-slate-700 font-medium">Data Atípica Inicio</Label>
                   <Input
                     id="dataInicialAtipica"
-                    type="date"
+                    type="text"
                     className="bg-gray-50"
+                    placeholder="dd/mm/aaaa"
                     value={novaDataAtipica.dataInicial}
-                    onChange={(e) => setNovaDataAtipica({ ...novaDataAtipica, dataInicial: e.target.value })}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2)
+                      if (value.length >= 5) value = value.slice(0,5) + '/' + value.slice(5,9)
+                      setNovaDataAtipica({ ...novaDataAtipica, dataInicial: value })
+                    }}
+                    maxLength={10}
                   />
                 </div>
-                <div className="col-span-2">
-                  <Label htmlFor="dataFinalAtipica" className="text-sm text-gray-600">Data Atípica Fim</Label>
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="dataFinalAtipica" className="text-slate-700 font-medium">Data Atípica Fim</Label>
                   <Input
                     id="dataFinalAtipica"
-                    type="date"
+                    type="text"
                     className="bg-gray-50"
+                    placeholder="dd/mm/aaaa"
                     value={novaDataAtipica.dataFinal}
-                    onChange={(e) => setNovaDataAtipica({ ...novaDataAtipica, dataFinal: e.target.value })}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2)
+                      if (value.length >= 5) value = value.slice(0,5) + '/' + value.slice(5,9)
+                      setNovaDataAtipica({ ...novaDataAtipica, dataFinal: value })
+                    }}
+                    maxLength={10}
                   />
                 </div>
-                <div className="col-span-3">
-                  <Label htmlFor="descricaoAtipica" className="text-sm text-gray-600">Descrição</Label>
+                <div className="col-span-3 space-y-2">
+                  <Label htmlFor="descricaoAtipica" className="text-slate-700 font-medium">Descrição</Label>
                   <div className="flex gap-2">
                     <Input
                       id="descricaoAtipica"
@@ -284,18 +375,21 @@ export default function DemandForecastPage() {
                     <Button
                       type="button"
                       onClick={adicionarDataAtipica}
-                      className="whitespace-nowrap"
+                      className="whitespace-nowrap px-3"
+                      title="Adicionar à tabela de datas atípicas"
                     >
-                      Adicionar
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                      </svg>
                     </Button>
                   </div>
                 </div>
               </div>
 
               {datasAtipicas.length > 0 && (
-                <div className="mt-4 space-y-2">
+                <div className="mt-3 space-y-2">
                   <Label className="text-sm text-gray-600">Períodos cadastrados:</Label>
-                  <div className="max-h-[200px] overflow-y-auto border border-gray-200 rounded-lg">
+                  <div className="max-h-[120px] overflow-y-auto border border-gray-200 rounded-lg">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 sticky top-0">
                         <tr>
@@ -309,7 +403,7 @@ export default function DemandForecastPage() {
                           <tr key={index} className="border-t border-gray-200 hover:bg-gray-50">
                             <td className="px-4 py-3">
                               <span className="font-medium">
-                                {new Date(data.dataInicial).toLocaleDateString('pt-BR')} até {new Date(data.dataFinal).toLocaleDateString('pt-BR')}
+                                {formatDate(data.dataInicial)} até {formatDate(data.dataFinal)}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-gray-500">
@@ -329,16 +423,22 @@ export default function DemandForecastPage() {
                                     });
                                     removerDataAtipica(index);
                                   }}
+                                  title="Editar"
                                 >
-                                  Editar
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
                                 </Button>
                                 <Button
                                   type="button"
                                   variant="destructive"
                                   size="sm"
                                   onClick={() => removerDataAtipica(index)}
+                                  title="Excluir"
                                 >
-                                  Excluir
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
                                 </Button>
                               </div>
                             </td>
@@ -356,7 +456,7 @@ export default function DemandForecastPage() {
                 value={JSON.stringify(datasAtipicas)}
               />
 
-              <div className="flex justify-center pt-4">
+              <div className="flex justify-center pt-3">
                 <Button
                   type="submit"
                   disabled={isPending || !selectedFile}
@@ -366,64 +466,99 @@ export default function DemandForecastPage() {
                 </Button>
               </div>
             </form>
-
-            {/* Results */}
-            {state && (
-              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                {state.success ? (
-                  <div className="text-green-600">
-                    <p className="font-medium">✓ Cálculo concluído com sucesso!</p>
-                    <p className="text-sm mt-1">{state.processedSkus} SKUs processados.</p>
-                    {state.details && (
-                      <div className="mt-2 text-xs text-gray-600">
-                        <p>Total de registros analisados: {state.details.totalRecords}</p>
-                        <p>Período analisado: {state.details.dateRange}</p>
-                        {state.details.statistics && (
-                          <>
-                            <p>Média diária de vendas: {state.details.statistics.mediaDiariaVendas}</p>
-                            <p>Intervalo em anos: {state.details.statistics.intervaloAnos}</p>
-                            <p>SKUs únicos: {state.details.statistics.skusUnicos}</p>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {state.downloadUrl && (
-                      <div className="mt-3 flex gap-2">
-                        <Button
-                          onClick={() => {
-                            const link = document.createElement("a")
-                            link.href = state.downloadUrl!
-                            link.download = state.filename || "previsao_calculada.csv"
-                            link.click()
-                          }}
-                          className="bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2"
-                        >
-                          📊 Baixar Planilha de Resultados
-                        </Button>
-                        <Link href="/dashboard">
-                          <Button className="bg-blue-600 hover:bg-blue-700 text-white hover:text-white text-sm px-4 py-2">
-                            📈 Ver Dashboard
-                          </Button>
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-red-600">
-                    <p className="font-medium">✗ Erro no cálculo:</p>
-                    <p className="text-sm mt-1">{state.error}</p>
-                  </div>
-                )}
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>
 
       {/* Footer */}
-      <div className="bg-slate-800 text-white text-center py-3 text-sm">
+      <div className="bg-slate-800 text-white text-center py-2 text-sm">
         © 2025 Cálculo Média Mês. Todos os direitos reservados.
       </div>
+
+      {/* Popup de Resultados */}
+      {showResultPopup && state && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 relative">
+            {/* Botão X para fechar */}
+            <button
+              onClick={() => setShowResultPopup(false)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-xl font-bold"
+            >
+              ×
+            </button>
+            
+            {state.success ? (
+              <div className="text-green-600">
+                <h3 className="text-lg font-medium mb-3">✓ Cálculo concluído com sucesso!</h3>
+                <p className="text-sm mb-2">{state.processedSkus} SKUs processados.</p>
+                {state.details && (
+                  <div className="mb-4 text-xs text-gray-600">
+                    <p>Total de registros analisados: {state.details.totalRecords}</p>
+                    <p>Período analisado: {state.details.dateRange}</p>
+                    {state.details.statistics && (
+                      <>
+                        <p>Média diária de vendas: {state.details.statistics.mediaDiariaVendas}</p>
+                        <p>Intervalo em anos: {state.details.statistics.intervaloAnos}</p>
+                        <p>SKUs únicos: {state.details.statistics.skusUnicos}</p>
+                      </>
+                    )}
+                  </div>
+                )}
+                {state.downloadUrl && (
+                  <div className="mt-4">
+                    <Button
+                      onClick={() => {
+                        // Create download link
+                        if (state.downloadUrl) {
+                          const link = document.createElement("a")
+                          link.href = state.downloadUrl
+                          link.download = state.filename || "previsao_calculada.csv"
+                          link.click()
+                        }
+                        
+                        // Fechar popup e resetar campos
+                        setShowResultPopup(false)
+                        
+                        // Resetar todos os campos
+                         setFieldValues({
+                           dataInicio: today || "01/01/2024",
+                           dataFim: today || "31/12/2024",
+                           diasPrevisao: "30"
+                         })
+                        
+                        // Resetar arquivo selecionado
+                        setSelectedFile(null)
+                        
+                        // Resetar datas atípicas
+                        setDatasAtipicas([])
+                        setNovaDataAtipica({
+                          dataInicial: '',
+                          dataFinal: '',
+                          descricao: ''
+                        })
+                        
+                        // Resetar input de arquivo
+                        const fileInput = document.getElementById('csvFile') as HTMLInputElement
+                        if (fileInput) {
+                          fileInput.value = ''
+                        }
+                      }}
+                      className="bg-green-600 hover:bg-green-700 text-white w-full"
+                    >
+                      📊 Baixar Planilha de Resultados
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-red-600">
+                <h3 className="text-lg font-medium mb-3">✗ Erro no cálculo</h3>
+                <p className="text-sm">{state.error}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

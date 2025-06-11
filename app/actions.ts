@@ -26,8 +26,17 @@ export async function calculateDemandForecast(
   try {
     const supabase = createClient()
 
-    const dataInicio = formData.get("dataInicio") as string
-    const dataFim = formData.get("dataFim") as string
+    const dataInicioStr = formData.get("dataInicio") as string
+    const dataFimStr = formData.get("dataFim") as string
+    
+    // Converter datas do formato dd/mm/aaaa para Date objects
+    const parseDate = (dateStr: string): Date => {
+      const [day, month, year] = dateStr.split('/')
+      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+    }
+    
+    const dataInicio = parseDate(dataInicioStr)
+    const dataFim = parseDate(dataFimStr)
     const diasPrevisao = Number.parseInt(formData.get("diasPrevisao") as string)
     const csvFile = formData.get("csvFile") as File
     
@@ -51,7 +60,7 @@ export async function calculateDemandForecast(
       return { success: false, error: "Todos os campos são obrigatórios" }
     }
 
-    if (new Date(dataInicio) >= new Date(dataFim)) {
+    if (dataInicio >= dataFim) {
       return { success: false, error: "Data início deve ser anterior à data fim" }
     }
 
@@ -64,8 +73,8 @@ export async function calculateDemandForecast(
     }
 
     // Filtrar dados pelo período
-    const dataInicioDate = new Date(dataInicio)
-    const dataFimDate = new Date(dataFim)
+    const dataInicioDate = dataInicio
+    const dataFimDate = dataFim
 
     const dadosFiltrados = vendasData.filter((venda) => {
       const dataVenda = new Date(venda.data)
@@ -111,11 +120,12 @@ export async function calculateDemandForecast(
     if (datasAtipicasForm && datasAtipicasForm.length > 0) {
       console.log('Processando datas atípicas do formulário para o cálculo Prophet');
       datasAtipicasForm.forEach(periodo => {
-        const dataInicial = new Date(periodo.dataInicial);
-        const dataFinal = new Date(periodo.dataFinal);
+        // Converter datas do formato dd/mm/aaaa para Date objects
+        const dataInicial = parseDate(periodo.dataInicial);
+        const dataFinal = parseDate(periodo.dataFinal);
         const descricao = periodo.descricao || 'periodo_atipico';
         
-        console.log(`Processando período atípico: ${dataInicial} a ${dataFinal} - ${descricao}`);
+        console.log(`Processando período atípico: ${dataInicial.toISOString().split('T')[0]} a ${dataFinal.toISOString().split('T')[0]} - ${descricao}`);
         
         // Adiciona cada dia do período como um holiday
         const tempDate = new Date(dataInicial);
@@ -212,12 +222,14 @@ export async function calculateDemandForecast(
     const dataFormatada = dataCalculo.toLocaleDateString("pt-BR")
     const filename = `previsao_calculada_${dataFormatada.replace(/\//g, "-")}.csv`
     const excelBuffer = generateExcel(resultados, dataFormatada)
-    const downloadUrl = await saveExcelFile(excelBuffer, filename)
+    
+    // Converter buffer para base64 para enviar ao cliente
+    const base64Data = Buffer.from(excelBuffer).toString('base64')
 
     return {
       success: true,
       processedSkus: resultados.length,
-      downloadUrl,
+      downloadUrl: `data:text/csv;base64,${base64Data}`,
       filename,
       details: {
         totalRecords: dadosFiltrados.length,
@@ -367,12 +379,7 @@ function generateExcel(resultados: any[], dataCalculo: string): ArrayBuffer {
   return encoder.encode(csvContent).buffer
 }
 
-// Função para salvar arquivo Excel
-async function saveExcelFile(buffer: ArrayBuffer, filename: string): Promise<string> {
-  const blob = new Blob([buffer], { type: "text/csv;charset=utf-8" })
-  const url = URL.createObjectURL(blob)
-  return url
-}
+// Função removida - download agora é feito no lado cliente
 
 // Adicione o parâmetro holidays ao criar o modelo Prophet
 // Nota: Isso deve ser implementado no seu script Python do Prophet

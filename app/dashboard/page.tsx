@@ -20,7 +20,17 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
-  const [filteredSkus, setFilteredSkus] = useState<Array<{ sku: string; media_prevista: number }>>([])
+  const [filteredSkus, setFilteredSkus] = useState<Array<{ sku: string; media_prevista: number }>>([])  
+
+  // Função para formatar data de forma consistente
+  const formatDate = (dateString: string) => {
+    if (typeof window === 'undefined') {
+      // No servidor, retornar formato simples
+      return dateString
+    }
+    // No cliente, usar toLocaleDateString
+    return new Date(dateString).toLocaleDateString('pt-BR')
+  }
 
   useEffect(() => {
     loadDashboardData()
@@ -61,7 +71,7 @@ export default function DashboardPage() {
 
       // Calcular KPIs
       const totalSkus = new Set(previsoes.map((p) => p.sku)).size
-      const ultimaPrevisao = new Date(previsoes[0].data_calculo).toLocaleDateString("pt-BR")
+      const ultimaPrevisao = formatDate(previsoes[0].data_calculo)
 
       // Todos os SKUs com suas últimas previsões
       const ultimasPrevisoes = previsoes.reduce(
@@ -367,7 +377,7 @@ useEffect(() => {
           <div key={data.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
             <div>
               <span className="font-medium">
-                {new Date(data.data_inicial).toLocaleDateString('pt-BR')} até {new Date(data.data_final).toLocaleDateString('pt-BR')}
+                {formatDate(data.data_inicial)} até {formatDate(data.data_final)}
               </span>
               {data.descricao && (
                 <span className="ml-2 text-gray-500">- {data.descricao}</span>
