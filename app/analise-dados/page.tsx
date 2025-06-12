@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-import { ArrowUpDown, Filter, Search, X, Edit2, Save, BarChart3, Download, Upload, ArrowLeft, ChevronUp, ChevronDown } from 'lucide-react'
+import { ArrowUpDown, Filter, Search, X, Edit2, Save, BarChart3, Download, Upload, ArrowLeft, ChevronUp, ChevronDown, Check, Plus } from 'lucide-react'
 import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
 
@@ -39,16 +39,18 @@ interface PrevisaoDemanda {
   calculo_realizado?: number
   fml_item?: string
   dt_implant?: string
+  diferencaCalculada?: number
 }
 
 type SortField = 'sku' | 'fml_item' | 'media_prevista' | 'dt_implant' | 'calculo_realizado' | 'diferenca'
 type SortDirection = 'asc' | 'desc'
 
-
-
 export default function AnaliseDadosPage() {
   const [dados, setDados] = useState<PrevisaoDemanda[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMoreData, setHasMoreData] = useState(false)
+  const [currentOffset, setCurrentOffset] = useState(0)
   const [editingRow, setEditingRow] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>('')
   const [totalSkus, setTotalSkus] = useState(0)
@@ -75,14 +77,10 @@ export default function AnaliseDadosPage() {
     return `PA-${num}`
   })
 
-  // Dados filtrados serão definidos após dadosComDiferenca
-
   // Handlers para filtros otimizados
   const handleSkuFilterChange = useCallback((value: string) => {
     setSkuFilter(value)
   }, [])
-
-
 
   const handleFamiliaSelectChange = useCallback((familia: string, checked: boolean) => {
     setFamiliaSelectFilter(prev => {
@@ -98,133 +96,216 @@ export default function AnaliseDadosPage() {
     setSkuFilter('')
   }, [])
 
-
-
   const clearFamiliaSelectFilter = useCallback(() => {
     setFamiliaSelectFilter([])
   }, [])
 
-  const clearAllFilters = useCallback(() => {
-    setSkuFilter('')
-    setFamiliaSelectFilter([])
-  }, [])
-  
-  // Não inicializar selectedSkus - deixar vazio por padrão para mostrar todos os dados
-  // useEffect removido para permitir que todos os dados sejam mostrados quando nenhum SKU estiver selecionado
-
-  // Carregar dados do Supabase
-  useEffect(() => {
-    carregarDados()
-  }, [])
-
+  // Função para carregar dados iniciais
   const carregarDados = async () => {
     try {
       setLoading(true)
+      console.log('🔄 Carregando dados iniciais...')
       
-      // Verificar se há dados do cálculo no sessionStorage
-      const dadosCalculoStr = sessionStorage.getItem('dadosCalculo')
-      let dadosCalculo = null
-      if (dadosCalculoStr) {
-        try {
-          dadosCalculo = JSON.parse(dadosCalculoStr)
-          console.log('Dados do cálculo encontrados no sessionStorage:', dadosCalculo)
-        } catch (error) {
-          console.error('Erro ao parsear dados do sessionStorage:', error)
-        }
-      }
+      // Primeiro, obter o total de registros
+      const { count } = await supabase
+        .from('previsoes_demanda')
+        .select('*', { count: 'exact', head: true })
       
-      let allData: any[] = []
-      let from = 0
-      const batchSize = 1000
-      let hasMore = true
+      setTotalSkus(count || 0)
+      console.log(`📊 Total de registros: ${count}`)
+      
+      // Carregar apenas os primeiros 5000 registros para melhor performance
+      const INITIAL_BATCH_SIZE = 5000
+      const { data, error } = await supabase
+        .from('previsoes_demanda')
+        .select('sku, media_prevista, fml_item, dt_implant')
+        .order('sku')
+        .range(0, INITIAL_BATCH_SIZE - 1)
 
-      // Buscar todos os dados usando paginação
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('previsoes_demanda')
-          .select('sku, media_prevista, fml_item, dt_implant')
-          .order('sku')
-          .range(from, from + batchSize - 1)
-
-        if (error) {
-          console.error('Erro ao carregar dados:', error)
-          return
-        }
-
-        if (data && data.length > 0) {
-          allData = [...allData, ...data]
-          from += batchSize
-          hasMore = data.length === batchSize
-        } else {
-          hasMore = false
-        }
+      if (error) {
+        console.error('Erro ao carregar dados:', error)
+        toast({
+          title: "Erro ao carregar dados",
+          description: error.message,
+          variant: "destructive"
+        })
+        return
       }
 
-      if (allData.length > 0) {
-        // Criar um mapa dos resultados do cálculo para busca rápida
-        const calculoMap = new Map()
-        const familiaMap = new Map()
-        if (dadosCalculo?.resultados) {
-          dadosCalculo.resultados.forEach((resultado: any) => {
-            calculoMap.set(resultado.sku, resultado.media)
-            if (resultado.familia) {
-              familiaMap.set(resultado.sku, resultado.familia)
-            }
-          })
-        }
+      if (data) {
+        // Tentar carregar resultados de cálculos do sessionStorage
+        const savedResults = sessionStorage.getItem('calculationResults')
+        let calculationResults: Record<string, number> = {}
         
-        // Adicionar campo calculo_realizado e atualizar família se disponível
-        const dadosComCalculo = allData.map(item => ({
+        if (savedResults) {
+          try {
+            calculationResults = JSON.parse(savedResults)
+            console.log('📋 Resultados de cálculos carregados do sessionStorage')
+          } catch (e) {
+            console.warn('Erro ao parsear resultados salvos:', e)
+          }
+        }
+
+        // Mesclar dados do Supabase com resultados de cálculos
+        const dadosComCalculos = data.map(item => ({
           ...item,
-          calculo_realizado: calculoMap.get(item.sku) || undefined,
-          fml_item: familiaMap.get(item.sku) || item.fml_item || ''
+          calculo_realizado: calculationResults[item.sku] || undefined,
+          fml_item: item.fml_item || ''
         }))
-        setDados(dadosComCalculo)
-        setTotalSkus(allData.length)
         
-        // Limpar dados do sessionStorage após carregar
-        if (dadosCalculo) {
-          sessionStorage.removeItem('dadosCalculo')
+        setDados(dadosComCalculos)
+        setCurrentOffset(INITIAL_BATCH_SIZE)
+        
+        // Verificar se há mais dados
+        if (count && count > INITIAL_BATCH_SIZE) {
+          setHasMoreData(true)
+          toast({
+            title: "Dados carregados",
+            description: `Primeiros ${INITIAL_BATCH_SIZE.toLocaleString('pt-BR')} registros carregados. ${(count - INITIAL_BATCH_SIZE).toLocaleString('pt-BR')} registros adicionais disponíveis.`,
+          })
+        } else {
+          setHasMoreData(false)
         }
+        
+        console.log(`✅ ${data.length} registros carregados com sucesso`)
       }
     } catch (error) {
-      console.error('Erro ao conectar com Supabase:', error)
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro de conexão",
+        description: "Não foi possível carregar os dados. Tente novamente.",
+        variant: "destructive"
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  // Função para calcular diferença percentual (otimizada - usa valor pré-calculado)
-  const calcularDiferenca = useCallback((item: any) => {
-    return item.diferencaCalculada || 0
+  // Função para carregar mais dados
+  const carregarMaisDados = async () => {
+    if (loadingMore || !hasMoreData) return
+    
+    try {
+      setLoadingMore(true)
+      const BATCH_SIZE = 2000
+      const newOffset = currentOffset
+      
+      console.log(`🔄 Carregando mais dados (offset: ${newOffset})...`)
+      
+      const { data, error } = await supabase
+        .from('previsoes_demanda')
+        .select('sku, media_prevista, fml_item, dt_implant')
+        .order('sku')
+        .range(newOffset, newOffset + BATCH_SIZE - 1)
+
+      if (error) {
+        console.error('Erro ao carregar mais dados:', error)
+        toast({
+          title: "Erro ao carregar mais dados",
+          description: error.message,
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (data && data.length > 0) {
+        // Adicionar novos dados aos existentes
+        const novosDados = data.map(item => ({
+          ...item,
+          calculo_realizado: undefined,
+          fml_item: item.fml_item || ''
+        }))
+        
+        setDados(prev => [...prev, ...novosDados])
+        setCurrentOffset(newOffset + BATCH_SIZE)
+        
+        // Verificar se há mais dados
+        if (data.length < BATCH_SIZE) {
+          setHasMoreData(false)
+        }
+        
+        console.log(`✅ Carregados mais ${data.length} registros`)
+        
+        toast({
+          title: "Mais dados carregados",
+          description: `${data.length} registros adicionais carregados.`,
+        })
+      } else {
+        setHasMoreData(false)
+        toast({
+          title: "Todos os dados carregados",
+          description: "Não há mais dados para carregar.",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao carregar mais dados:', error)
+      toast({
+        title: "Erro de conexão",
+        description: "Não foi possível carregar mais dados. Tente novamente.",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  // Carregar dados na inicialização
+  useEffect(() => {
+    carregarDados()
   }, [])
 
-  // Iniciar edição
+  // Função para iniciar edição
   const iniciarEdicao = (sku: string, valorAtual?: number) => {
     setEditingRow(sku)
     setEditValue(valorAtual?.toString() || '')
-  }
-
-  // Salvar edição
-  const salvarEdicao = () => {
-    if (editingRow) {
-      const novoValor = parseFloat(editValue)
-      if (!isNaN(novoValor)) {
-        setDados(prev => prev.map(item => 
-          item.sku === editingRow 
-            ? { ...item, calculo_realizado: novoValor }
-            : item
-        ))
-      }
-      setEditingRow(null)
-      setEditValue('')
-    }
   }
 
   // Cancelar edição
   const cancelarEdicao = () => {
     setEditingRow(null)
     setEditValue('')
+  }
+
+  // Salvar edição
+  const salvarEdicao = (sku: string) => {
+    const novoValor = parseFloat(editValue)
+    if (isNaN(novoValor)) {
+      toast({
+        title: "Valor inválido",
+        description: "Por favor, insira um número válido.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setDados(prev => prev.map(item => 
+      item.sku === sku 
+        ? { ...item, calculo_realizado: novoValor }
+        : item
+    ))
+
+    // Salvar no sessionStorage
+    const savedResults = sessionStorage.getItem('calculationResults')
+    let calculationResults: Record<string, number> = {}
+    
+    if (savedResults) {
+      try {
+        calculationResults = JSON.parse(savedResults)
+      } catch (e) {
+        console.warn('Erro ao parsear resultados salvos:', e)
+      }
+    }
+    
+    calculationResults[sku] = novoValor
+    sessionStorage.setItem('calculationResults', JSON.stringify(calculationResults))
+
+    setEditingRow(null)
+    setEditValue('')
+    
+    toast({
+      title: "Valor atualizado",
+      description: `Cálculo realizado para ${sku} foi atualizado.`,
+    })
   }
 
   // Função para salvar dados no Supabase e exportar Excel
@@ -307,10 +388,6 @@ export default function AnaliseDadosPage() {
       sortField === field && prev === 'asc' ? 'desc' : 'asc'
     )
   }, [sortField])
-
-
-
-
 
   // Memoizar cálculos de diferença para evitar recálculos
   const dadosComDiferenca = useMemo(() => {
@@ -457,6 +534,8 @@ export default function AnaliseDadosPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      <Toaster />
+      
       {/* Header */}
       <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 shadow-xl">
         <div className="container mx-auto px-4 py-3">
@@ -501,82 +580,81 @@ export default function AnaliseDadosPage() {
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-medium text-white/80 whitespace-nowrap">Código do Item:</label>
                     <div className="relative w-64">
-                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-white/60 w-3 h-3" />
-                    <Input
-                      placeholder="Digite o código..."
-                      value={skuFilter}
-                      onChange={(e) => handleSkuFilterChange(e.target.value)}
-                      className="pl-7 pr-7 bg-white/10 border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40 h-12 text-sm transition-all duration-200 w-full"
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    {skuFilter && (
-                      <button
-                        onClick={clearSkuFilter}
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white transition-colors"
-                        type="button"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
+                      <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-white/60 w-3 h-3" />
+                      <Input
+                        placeholder="Digite o código..."
+                        value={skuFilter}
+                        onChange={(e) => handleSkuFilterChange(e.target.value)}
+                        className="pl-7 pr-7 bg-white/10 border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40 h-12 text-sm transition-all duration-200 w-full"
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                      {skuFilter && (
+                        <button
+                          onClick={clearSkuFilter}
+                          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white transition-colors"
+                          type="button"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
 
                   {/* Filtro por Família (Checkboxes) */}
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-medium text-white/80 whitespace-nowrap">Família do Produto:</label>
                     <div className="w-64">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/40 h-12 text-sm transition-all duration-200 w-full justify-between"
-                        >
-                          <span className="truncate">
-                            {familiaSelectFilter.length === 0 
-                              ? "Selecione famílias..." 
-                              : `${familiaSelectFilter.length} selecionada(s)`
-                            }
-                          </span>
-                          <ChevronDown className="w-3 h-3 ml-2 flex-shrink-0" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-48 p-2 bg-slate-800 border-slate-700">
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {familiaOptions.map((familia) => (
-                            <div key={familia} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={familia}
-                                checked={familiaSelectFilter.includes(familia)}
-                                onCheckedChange={(checked) => handleFamiliaSelectChange(familia, checked as boolean)}
-                                className="border-white/20 data-[state=checked]:bg-white data-[state=checked]:border-white"
-                              />
-                              <label
-                                htmlFor={familia}
-                                className="text-sm text-white cursor-pointer flex-1"
-                              >
-                                {familia}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                        {familiaSelectFilter.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-slate-600">
-                            <Button
-                              onClick={clearFamiliaSelectFilter}
-                              variant="outline"
-                              size="sm"
-                              className="w-full h-6 text-xs bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
-                            >
-                              Limpar Seleção
-                            </Button>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/40 h-12 text-sm transition-all duration-200 w-full justify-between"
+                          >
+                            <span className="truncate">
+                              {familiaSelectFilter.length === 0 
+                                ? "Selecione famílias..." 
+                                : `${familiaSelectFilter.length} selecionada(s)`
+                              }
+                            </span>
+                            <ChevronDown className="w-3 h-3 ml-2 flex-shrink-0" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-48 p-2 bg-slate-800 border-slate-700">
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {familiaOptions.map((familia) => (
+                              <div key={familia} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={familia}
+                                  checked={familiaSelectFilter.includes(familia)}
+                                  onCheckedChange={(checked) => handleFamiliaSelectChange(familia, checked as boolean)}
+                                  className="border-white/20 data-[state=checked]:bg-white data-[state=checked]:border-white"
+                                />
+                                <label
+                                  htmlFor={familia}
+                                  className="text-sm text-white cursor-pointer flex-1"
+                                >
+                                  {familia}
+                                </label>
+                              </div>
+                            ))}
                           </div>
-                        )}
-                      </PopoverContent>
-                    </Popover>
+                          {familiaSelectFilter.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-slate-600">
+                              <Button
+                                onClick={clearFamiliaSelectFilter}
+                                variant="outline"
+                                size="sm"
+                                className="w-full h-6 text-xs bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+                              >
+                                Limpar Seleção
+                              </Button>
+                            </div>
+                          )}
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                   </div>
-                </div>
-
                 </div>
                 
                 {/* Botão Exportar no centro-direita */}
@@ -728,28 +806,28 @@ export default function AnaliseDadosPage() {
                         </div>
                       </TableHead>
                       <TableHead className="font-semibold text-white bg-slate-800 text-sm w-20 text-center">Ações</TableHead>
-                     </TableRow>
-                   </TableHeader>
-                 </Table>
-               </div>
-               <div 
-                 className="flex-1 overflow-auto"
-                 style={{ height: containerHeight }}
-                 onScroll={handleScroll}
-               >
-                 <div style={{ height: virtualizedData.totalHeight, position: 'relative' }}>
-                   <Table>
-                     <TableHeader className="sr-only">
-                       <TableRow>
-                         <TableHead className="w-32">Código Item</TableHead>
-                         <TableHead className="w-20">Família</TableHead>
-                         <TableHead className="w-24">Média Atual</TableHead>
-                         <TableHead className="w-24">Data Implant.</TableHead>
-                         <TableHead className="w-28">Cálculo Realizado</TableHead>
-                         <TableHead className="text-center w-24">Diferença (%)</TableHead>
-                          <TableHead className="text-center w-20">Ações</TableHead>
-                       </TableRow>
-                     </TableHeader>
+                    </TableRow>
+                  </TableHeader>
+                </Table>
+              </div>
+              <div 
+                className="flex-1 overflow-auto"
+                style={{ height: containerHeight }}
+                onScroll={handleScroll}
+              >
+                <div style={{ height: virtualizedData.totalHeight, position: 'relative' }}>
+                  <Table>
+                    <TableHeader className="sr-only">
+                      <TableRow>
+                        <TableHead className="w-32">Código Item</TableHead>
+                        <TableHead className="w-20">Família</TableHead>
+                        <TableHead className="w-24">Média Atual</TableHead>
+                        <TableHead className="w-24">Data Implant.</TableHead>
+                        <TableHead className="w-28">Cálculo Realizado</TableHead>
+                        <TableHead className="text-center w-24">Diferença (%)</TableHead>
+                        <TableHead className="text-center w-20">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
                       <tr style={{ height: virtualizedData.offsetY }}></tr>
                       {virtualizedData.items.map((item) => {
@@ -764,79 +842,78 @@ export default function AnaliseDadosPage() {
                             }`}
                             style={{ height: rowHeight }}
                           >
-                          <TableCell className="font-medium py-2 text-sm w-32">{item.sku}</TableCell>
-                          <TableCell className="text-center py-2 text-sm w-20">{item.fml_item || '-'}</TableCell>
-                           <TableCell className="text-center py-2 text-sm w-24">{item.media_prevista.toLocaleString('pt-BR', { maximumFractionDigits: 0, useGrouping: true }).replace(/,/g, '.')}</TableCell>
-                           <TableCell className="text-center py-2 text-sm w-24">
-                             {item.dt_implant ? item.dt_implant.split('T')[0].split('-').reverse().join('/') : '-'}
-                           </TableCell>
-                           <TableCell className="text-center py-2 text-sm w-28">
-                             {editingRow === item.sku ? (
-                               <div className="flex items-center justify-center gap-2">
-                                 <Input
-                                   type="number"
-                                   step="0.01"
-                                   value={editValue}
-                                   onChange={(e) => setEditValue(e.target.value)}
-                                   className="w-20 h-6 text-sm text-center"
-                                   autoFocus
-                                 />
-                               </div>
-                             ) : (
-                               <span className={item.calculo_realizado ? '' : 'text-slate-400'}>
-                                 {item.calculo_realizado ? item.calculo_realizado.toLocaleString('pt-BR', { maximumFractionDigits: 0, useGrouping: true }).replace(/,/g, '.') : '0'}
-                               </span>
-                             )}
-                           </TableCell>
-                           <TableCell className="text-center py-2 w-24">
+                            <TableCell className="font-medium py-2 text-sm w-32">{item.sku}</TableCell>
+                            <TableCell className="text-center py-2 text-sm w-20">{item.fml_item || '-'}</TableCell>
+                            <TableCell className="text-center py-2 text-sm w-24">{item.media_prevista.toLocaleString('pt-BR', { maximumFractionDigits: 0, useGrouping: true }).replace(/,/g, '.')}</TableCell>
+                            <TableCell className="text-center py-2 text-sm w-24">
+                              {item.dt_implant ? item.dt_implant.split('T')[0].split('-').reverse().join('/') : '-'}
+                            </TableCell>
+                            <TableCell className="text-center py-2 text-sm w-28">
+                              {editingRow === item.sku ? (
+                                <div className="flex items-center justify-center gap-2">
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={editValue}
+                                    onChange={(e) => setEditValue(e.target.value)}
+                                    className="w-20 h-6 text-sm text-center"
+                                    autoFocus
+                                  />
+                                </div>
+                              ) : (
+                                <span className={item.calculo_realizado ? '' : 'text-slate-400'}>
+                                  {item.calculo_realizado ? item.calculo_realizado.toLocaleString('pt-BR', { maximumFractionDigits: 0, useGrouping: true }).replace(/,/g, '.') : '0'}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center py-2 w-24">
                               <span className={`font-medium text-sm ${
                                 item.calculo_realizado && item.calculo_realizado > 0
-                                  ? item.diferencaCalculada > 0
+                                  ? item.diferencaCalculada! > 0
                                     ? 'text-green-600'
-                                    : item.diferencaCalculada < 0
+                                    : item.diferencaCalculada! < 0
                                       ? 'text-red-600'
                                       : 'text-slate-500'
                                   : 'text-slate-500'
                               }`}>
                                 {item.calculo_realizado && item.calculo_realizado > 0 
-                                   ? `${item.diferencaCalculada < 0 ? '-' : ''}${Math.abs(item.diferencaCalculada).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
-                                   : '-'
-                                 }
+                                   ? `${item.diferencaCalculada!.toFixed(1)}%`
+                                   : '0.0%'
+                                }
                               </span>
                             </TableCell>
-                           <TableCell className="text-center py-2 w-20">
-                            {editingRow === item.sku ? (
-                              <div className="flex items-center justify-center gap-1">
+                            <TableCell className="text-center py-2 w-20">
+                              {editingRow === item.sku ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  <Button
+                                    onClick={() => salvarEdicao(item.sku)}
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 w-6 p-0 bg-green-50 border-green-200 hover:bg-green-100"
+                                  >
+                                    <Check className="w-3 h-3 text-green-600" />
+                                  </Button>
+                                  <Button
+                                    onClick={cancelarEdicao}
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 w-6 p-0 bg-red-50 border-red-200 hover:bg-red-100"
+                                  >
+                                    <X className="w-3 h-3 text-red-600" />
+                                  </Button>
+                                </div>
+                              ) : (
                                 <Button
-                                  size="sm"
-                                  onClick={salvarEdicao}
-                                  className="h-6 w-6 p-0 bg-green-600 hover:bg-green-700"
-                                >
-                                  <Save className="w-2 h-2" />
-                                </Button>
-                                <Button
+                                  onClick={() => iniciarEdicao(item.sku, item.calculo_realizado)}
                                   size="sm"
                                   variant="outline"
-                                  onClick={cancelarEdicao}
-                                  className="h-6 w-6 p-0"
+                                  className="h-6 w-6 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100"
                                 >
-                                  <X className="w-2 h-2" />
+                                  <Edit2 className="w-3 h-3 text-blue-600" />
                                 </Button>
-                              </div>
-                            ) : (
-                              <div className="flex justify-center">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => iniciarEdicao(item.sku, item.calculo_realizado)}
-                                  className="h-6 w-6 p-0 hover:bg-blue-100"
-                                >
-                                  <Edit2 className="w-2 h-2" />
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
+                              )}
+                            </TableCell>
+                          </TableRow>
                         )
                       })}
                     </TableBody>
@@ -845,42 +922,51 @@ export default function AnaliseDadosPage() {
               </div>
             </div>
             
-            {dadosProcessados.length === 0 && (
-              <div className="text-center py-8 text-slate-500">
-                <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                {(skuFilter || familiaSelectFilter.length > 0) ? (
-                  <div>
-                    <p className="mb-2">Nenhum item encontrado para os filtros aplicados</p>
-                    <div className="flex gap-2 justify-center">
-                      {skuFilter && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={clearSkuFilter}
-                          className="text-blue-600 hover:text-blue-700"
-                        >
-                          Limpar filtro SKU
-                        </Button>
-                      )}
-                      {familiaSelectFilter.length > 0 && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" onClick={clearFamiliaSelectFilter}
-                          className="text-blue-600 hover:text-blue-700"
-                        >
-                          Limpar filtro Família
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p>Nenhum dado encontrado</p>
+            {/* Seção de informações e botão carregar mais */}
+            <div className="mt-4 flex items-center justify-between">
+              <div className="flex items-center gap-4 text-sm text-slate-600">
+                <span>Total de SKUs: {totalSkus.toLocaleString('pt-BR')}</span>
+                <span>Exibindo: {dadosProcessados.length.toLocaleString('pt-BR')}</span>
+                {hasMoreData && (
+                  <span className="text-blue-600 font-medium">
+                    Mais dados disponíveis
+                  </span>
                 )}
+              </div>
+              
+              {hasMoreData && (
+                <Button
+                  onClick={carregarMaisDados}
+                  disabled={loadingMore}
+                  variant="outline"
+                  size="sm"
+                  className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                >
+                  {loadingMore ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                      Carregando...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Carregar Mais Dados
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+            
+            {/* Progress indicator para salvamento */}
+            {isSaving && saveProgress && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span className="text-sm text-blue-700">{saveProgress}</span>
+                </div>
               </div>
             )}
           </CardContent>
-          
-
         </Card>
       </main>
     </div>
