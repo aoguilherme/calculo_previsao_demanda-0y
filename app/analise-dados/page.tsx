@@ -862,7 +862,7 @@ export default function AnaliseDadosPage() {
                           Limpar filtro SKU
                         </Button>
                       )}
-                      {familiaFilter && (
+                      {familiaSelectFilter.length > 0 && (
                         <Button 
                           variant="outline" 
                           size="sm" 
