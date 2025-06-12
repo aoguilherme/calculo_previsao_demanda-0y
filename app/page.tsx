@@ -5,13 +5,20 @@ import type React from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { X, FileText, BarChart3 } from "lucide-react"
-import { calculateDemandForecast } from "./actions"
-import { useActionState, useState } from "react"
+import { X, FileText, BarChart3, Upload } from "lucide-react"
+import { calculateDemandForecast, importMediasData } from "./actions"
+import { useActionState, useState, useTransition } from "react"
 import Link from "next/link"
 
 export default function DemandForecastPage() {
   const [state, action, isPending] = useActionState(calculateDemandForecast, null)
+  const [importState, setImportState] = useState<{
+    success: boolean
+    message?: string
+    error?: string
+    importedCount?: number
+  } | null>(null)
+  const [isImporting, startImportTransition] = useTransition()
 
   // Data atual formatada para input date
   const today = new Date().toISOString().split("T")[0]
@@ -26,6 +33,7 @@ export default function DemandForecastPage() {
   // Estados para controlar os valores dos campos
   const [fieldValues, setFieldValues] = useState(defaultValues)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedMediasFile, setSelectedMediasFile] = useState<File | null>(null)
 
   const handleFieldChange = (field: string, value: string) => {
     setFieldValues((prev) => ({ ...prev, [field]: value }))
@@ -50,10 +58,48 @@ export default function DemandForecastPage() {
     }
   }
 
+  const handleMediasFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file && file.type === "text/csv") {
+      setSelectedMediasFile(file)
+    } else {
+      alert("Por favor, selecione um arquivo CSV válido.")
+      event.target.value = ""
+    }
+  }
+
   const removeFile = () => {
     setSelectedFile(null)
     const fileInput = document.getElementById("csvFile") as HTMLInputElement
     if (fileInput) fileInput.value = ""
+  }
+
+  const removeMediasFile = () => {
+    setSelectedMediasFile(null)
+    const fileInput = document.getElementById("mediasFile") as HTMLInputElement
+    if (fileInput) fileInput.value = ""
+  }
+
+  const handleImportMedias = async () => {
+    if (!selectedMediasFile) {
+      alert("Por favor, selecione um arquivo de médias primeiro.")
+      return
+    }
+
+    startImportTransition(async () => {
+      const formData = new FormData()
+      formData.append("mediasFile", selectedMediasFile)
+
+      try {
+        const result = await importMediasData(null, formData)
+        setImportState(result)
+      } catch (error) {
+        setImportState({
+          success: false,
+          error: error instanceof Error ? error.message : "Erro interno do servidor",
+        })
+      }
+    })
   }
 
   return (
@@ -85,6 +131,71 @@ export default function DemandForecastPage() {
             <CardTitle className="text-slate-700 text-lg font-medium">Preencha os Dados</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Upload do arquivo de médias */}
+            <div className="space-y-2">
+              <Label htmlFor="mediasFile" className="text-slate-700 font-medium">
+                Arquivo de Médias (CSV)
+              </Label>
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <Input
+                    id="mediasFile"
+                    name="mediasFile"
+                    type="file"
+                    accept=".csv"
+                    className="bg-gray-50 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100"
+                    onChange={handleMediasFileChange}
+                  />
+                  {selectedMediasFile && (
+                    <div className="mt-2 flex items-center justify-between p-2 bg-blue-50 border border-blue-200 rounded">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-blue-600" />
+                        <span className="text-sm text-blue-700">{selectedMediasFile.name}</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 hover:bg-blue-100"
+                        onClick={removeMediasFile}
+                        title="Remover arquivo"
+                      >
+                        <X className="h-3 w-3 text-blue-600" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleImportMedias}
+                  disabled={!selectedMediasFile || isImporting}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 disabled:opacity-50"
+                  title="Importar dados para o Supabase"
+                >
+                  {isImporting ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500">
+                Formato esperado: sku;fml_item;media_prevista;dt_implant (separado por ponto e vírgula)
+              </p>
+              {/* Resultado da importação */}
+              {importState && (
+                <div className="mt-2 p-2 rounded">
+                  {importState.success ? (
+                    <div className="text-green-600 text-sm">
+                      ✓ {importState.message} ({importState.importedCount} registros importados)
+                    </div>
+                  ) : (
+                    <div className="text-red-600 text-sm">✗ {importState.error}</div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <form action={action} className="space-y-6">
               {/* Upload do arquivo CSV */}
               <div className="space-y-2">

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ArrowLeft, TrendingUp, Package, Calendar, Target, Search } from "lucide-react"
+import { ArrowLeft, TrendingUp, Package, Calendar, Target, Search, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 
@@ -19,6 +19,7 @@ interface DashboardData {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [filteredSkus, setFilteredSkus] = useState<Array<{ sku: string; media_prevista: number }>>([])
 
@@ -97,6 +98,34 @@ export default function DashboardPage() {
     }
   }
 
+  const clearAllData = async () => {
+    if (!confirm("Tem certeza que deseja excluir TODOS os dados de previsões? Esta ação não pode ser desfeita.")) {
+      return
+    }
+
+    setDeleting(true)
+    try {
+      const supabase = createClient()
+
+      const { error } = await supabase.from("previsoes_demanda").delete().neq("id", 0) // Deleta todos os registros
+
+      if (error) {
+        console.error("Erro ao excluir dados:", error)
+        alert("Erro ao excluir os dados. Tente novamente.")
+        return
+      }
+
+      // Recarregar dados após exclusão
+      await loadDashboardData()
+      alert("Todos os dados foram excluídos com sucesso!")
+    } catch (error) {
+      console.error("Erro ao excluir dados:", error)
+      alert("Erro ao excluir os dados. Tente novamente.")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -124,6 +153,17 @@ export default function DashboardPage() {
           </Link>
           <h1 className="text-xl font-semibold">Dashboard - Análise de Previsões</h1>
         </div>
+        {data && data.totalSkus > 0 && (
+          <Button
+            onClick={clearAllData}
+            disabled={deleting}
+            variant="destructive"
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            {deleting ? "Excluindo..." : "Limpar Todos os Dados"}
+          </Button>
+        )}
       </div>
 
       {/* Main Content */}

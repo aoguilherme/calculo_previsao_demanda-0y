@@ -19,6 +19,116 @@ interface ForecastResult {
   }
 }
 
+interface ImportResult {
+  success: boolean
+  message?: string
+  error?: string
+  importedCount?: number
+}
+
+export async function importMediasData(prevState: ImportResult | null, formData: FormData): Promise<ImportResult> {
+  try {
+    const supabase = createClient()
+    const mediasFile = formData.get("mediasFile") as File
+
+    if (!mediasFile) {
+      return { success: false, error: "Arquivo de médias é obrigatório" }
+    }
+
+    // Ler e processar o arquivo CSV
+    const csvText = await mediasFile.text()
+    const mediasData = parseMediasCSV(csvText)
+
+    if (mediasData.length === 0) {
+      return { success: false, error: "Nenhum dado válido encontrado no arquivo CSV" }
+    }
+
+    // Limpar tabela antes de inserir novos dados
+    const { error: deleteError } = await supabase.from("previsoes_demanda").delete().neq("id", 0)
+
+    if (deleteError) {
+      console.error("Erro ao limpar tabela:", deleteError)
+      return { success: false, error: `Erro ao limpar dados existentes: ${deleteError.message}` }
+    }
+
+    // Resetar sequência do ID para começar em 1
+    const { error: resetError } = await supabase.rpc("reset_id_sequence")
+
+    if (resetError) {
+      console.warn("Aviso: Não foi possível resetar a sequência do ID:", resetError)
+      // Continuar mesmo com erro no reset da sequência
+    }
+
+    // Preparar dados para inserção no Supabase
+    const dataCalculo = new Date()
+    const dadosParaInserir = mediasData.map((item) => ({
+      sku: item.sku,
+      fml_item: item.fml_item,
+      media_prevista: item.media_prevista,
+      dt_implant: item.dt_implant,
+      data_calculo: dataCalculo.toISOString(),
+    }))
+
+    // Inserir no Supabase
+    const { error: insertError } = await supabase.from("previsoes_demanda").insert(dadosParaInserir)
+
+    if (insertError) {
+      console.error("Erro ao inserir dados no Supabase:", insertError)
+      return { success: false, error: `Erro ao salvar dados: ${insertError.message}` }
+    }
+
+    return {
+      success: true,
+      message: "Dados importados com sucesso! IDs começando em 1.",
+      importedCount: dadosParaInserir.length,
+    }
+  } catch (error) {
+    console.error("Erro na importação:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Erro interno do servidor",
+    }
+  }
+}
+
+// Função para fazer parse do CSV de médias
+function parseMediasCSV(csvText: string) {
+  const lines = csvText.trim().split("\n")
+  const mediasArray = []
+
+  // Pular cabeçalho se existir
+  const startIndex = lines[0].toLowerCase().includes("sku") ? 1 : 0
+
+  for (let i = startIndex; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+
+    const [sku, fml_item, media_prevista, dt_implant] = line.split(";")
+
+    if (sku && fml_item && media_prevista && dt_implant) {
+      try {
+        // Converter data do formato dd/mm/yyyy para Date
+        const [dia, mes, ano] = dt_implant.split("/")
+        const dataImplant = new Date(Number.parseInt(ano), Number.parseInt(mes) - 1, Number.parseInt(dia))
+        const mediaPrevista = Number.parseFloat(media_prevista.replace(",", "."))
+
+        if (!isNaN(dataImplant.getTime()) && !isNaN(mediaPrevista)) {
+          mediasArray.push({
+            sku: sku.trim(),
+            fml_item: fml_item.trim(),
+            media_prevista: mediaPrevista,
+            dt_implant: dataImplant.toISOString().split("T")[0], // Formato YYYY-MM-DD
+          })
+        }
+      } catch (error) {
+        console.warn(`Erro ao processar linha ${i + 1}: ${line}`)
+      }
+    }
+  }
+
+  return mediasArray
+}
+
 export async function calculateDemandForecast(
   prevState: ForecastResult | null,
   formData: FormData,
@@ -127,6 +237,22 @@ export async function calculateDemandForecast(
 
     if (resultados.length === 0) {
       return { success: false, error: "Nenhum SKU com dados suficientes para previsão" }
+    }
+
+    // Limpar tabela antes de inserir novos dados calculados
+    const { error: deleteError } = await supabase.from("previsoes_demanda").delete().neq("id", 0)
+
+    if (deleteError) {
+      console.warn("Aviso: Não foi possível limpar dados existentes:", deleteError)
+      // Continuar mesmo com erro na limpeza
+    }
+
+    // Resetar sequência do ID para começar em 1
+    const { error: resetError } = await supabase.rpc("reset_id_sequence")
+
+    if (resetError) {
+      console.warn("Aviso: Não foi possível resetar a sequência do ID:", resetError)
+      // Continuar mesmo com erro no reset da sequência
     }
 
     // Salvar no Supabase
