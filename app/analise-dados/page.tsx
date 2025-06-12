@@ -848,7 +848,7 @@ export default function AnaliseDadosPage() {
             {dadosProcessados.length === 0 && (
               <div className="text-center py-8 text-slate-500">
                 <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                {(skuFilter || familiaFilter) ? (
+                {(skuFilter || familiaSelectFilter.length > 0) ? (
                   <div>
                     <p className="mb-2">Nenhum item encontrado para os filtros aplicados</p>
                     <div className="flex gap-2 justify-center">
@@ -865,8 +865,7 @@ export default function AnaliseDadosPage() {
                       {familiaSelectFilter.length > 0 && (
                         <Button 
                           variant="outline" 
-                          size="sm" 
-                          onClick={clearFamiliaFilter}
+                          size="sm" onClick={clearFamiliaSelectFilter}
                           className="text-blue-600 hover:text-blue-700"
                         >
                           Limpar filtro Família
