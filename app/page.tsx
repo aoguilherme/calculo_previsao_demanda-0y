@@ -1,15 +1,13 @@
 "use client"
+import React, { useState, useEffect, useActionState } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import type React from "react"
-
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { X, FileText, BarChart3, Upload, CheckCircle, Calendar, Plus, Edit2, Trash2, Calculator, ArrowRight, AlertTriangle, AlertCircle } from "lucide-react"
 import { calculateDemandForecast } from "./actions"
-import { useActionState, useState, useEffect } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
 
 export default function DemandForecastPage() {
   // Mova todos os estados para dentro do componente
@@ -89,12 +87,18 @@ export default function DemandForecastPage() {
     // Limpar erro anterior
     setDataAtipicaError('');
     
+    // 1. Verificar se existe anexo no campo "Anexar histórico de vendas"
+    if (!selectedFile) {
+      setDataAtipicaError('É necessário anexar o histórico de vendas antes de adicionar datas atípicas!');
+      return;
+    }
+    
     if (!novaDataAtipica.data) {
       setDataAtipicaError('Formato e/ou valor de data incorreto!');
       return;
     }
 
-    // Validar formato mm/aaaa
+    // 2. Validar formato mm/aaaa
     const formatoRegex = /^(0[1-9]|1[0-2])\/\d{4}$/;
     if (!formatoRegex.test(novaDataAtipica.data)) {
       setDataAtipicaError('Formato e/ou valor de data incorreto!');
@@ -118,13 +122,13 @@ export default function DemandForecastPage() {
     }
 
     // Verificar se a data já existe na lista
-    const dataJaExiste = datasAtipicas.some(item => item.data === novaDataAtipica.data);
+    const dataJaExiste = datasAtipicas.some(item => item.dataInicial === novaDataAtipica.data);
     if (dataJaExiste) {
       setDataAtipicaError('Formato e/ou valor de data incorreto!');
       return;
     }
 
-    // Verificar se a data existe no arquivo de vendas anexado
+    // 3. Verificar se a data existe no arquivo de vendas anexado
     if (csvData.length > 0) {
       const [mes, ano] = novaDataAtipica.data.split('/');
       const mesNum = parseInt(mes, 10);
@@ -139,6 +143,10 @@ export default function DemandForecastPage() {
         setDataAtipicaError('Data inexistente na planilha de vendas!');
         return;
       }
+    } else {
+      // Se não há dados CSV processados, mas há arquivo selecionado, significa que houve erro no processamento
+      setDataAtipicaError('Erro ao processar o arquivo de vendas. Verifique o formato do arquivo.');
+      return;
     }
 
     // Converter data para validação adicional
@@ -149,7 +157,11 @@ export default function DemandForecastPage() {
       return;
     }
 
-    setDatasAtipicas([...datasAtipicas, novaDataAtipica]);
+    setDatasAtipicas([...datasAtipicas, {
+      dataInicial: novaDataAtipica.data,
+      dataFinal: novaDataAtipica.data,
+      descricao: novaDataAtipica.descricao
+    }]);
     setNovaDataAtipica({ data: '', descricao: '' });
   };
 
@@ -196,6 +208,12 @@ export default function DemandForecastPage() {
       const lines = csvText.trim().split("\n")
       const dados: Array<{data: Date, sku: string, familia: string, vendas: number}> = []
       
+      // Mapeamento de meses em português para números
+      const mesesPt: {[key: string]: number} = {
+        'jan': 1, 'fev': 2, 'mar': 3, 'abr': 4, 'mai': 5, 'jun': 6,
+        'jul': 7, 'ago': 8, 'set': 9, 'out': 10, 'nov': 11, 'dez': 12
+      }
+      
       // Pular cabeçalho (primeira linha)
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim()
@@ -205,11 +223,32 @@ export default function DemandForecastPage() {
         if (parts.length >= 4) {
           const [dataStr, sku, familia, vendasStr] = parts
           
-          // Converter data para objeto Date
-          const dataVenda = new Date(dataStr)
+          // Converter data do formato brasileiro (ex: "fev/25") para objeto Date
+          let dataVenda: Date | null = null
+          
+          // Primeiro, tentar formato brasileiro "mmm/aa" ou "mmm/aaaa"
+          const matchBr = dataStr.match(/^([a-z]{3})\/(\d{2,4})$/i)
+          if (matchBr) {
+            const [, mesStr, anoStr] = matchBr
+            const mesNum = mesesPt[mesStr.toLowerCase()]
+            let anoNum = parseInt(anoStr, 10)
+            
+            // Se ano tem 2 dígitos, assumir 20xx
+            if (anoNum < 100) {
+              anoNum += 2000
+            }
+            
+            if (mesNum && anoNum) {
+              dataVenda = new Date(anoNum, mesNum - 1, 1) // mês é 0-indexado no Date
+            }
+          } else {
+            // Tentar conversão direta para outros formatos
+            dataVenda = new Date(dataStr)
+          }
+          
           const vendas = Number.parseInt(vendasStr)
           
-          if (!isNaN(dataVenda.getTime()) && !isNaN(vendas)) {
+          if (dataVenda && !isNaN(dataVenda.getTime()) && !isNaN(vendas)) {
             dados.push({
               data: dataVenda,
               sku: sku,
@@ -222,6 +261,7 @@ export default function DemandForecastPage() {
       
       setCsvData(dados)
       console.log('📊 Dados do CSV processados:', dados.length, 'registros')
+      console.log('📅 Primeiras 5 datas processadas:', dados.slice(0, 5).map(d => `${d.data.getMonth() + 1}/${d.data.getFullYear()}`))
     } catch (error) {
       console.error('Erro ao processar CSV:', error)
       setCsvData([])
@@ -503,32 +543,63 @@ export default function DemandForecastPage() {
                     <div className="space-y-2">
                       <div>
                         <Label className="text-xs font-medium text-slate-600">Data</Label>
-                        <Input
-                          type="text"
-                          placeholder="mm/aaaa"
-                          value={novaDataAtipica.data}
-                          onChange={(e) => {
-                            let value = e.target.value.replace(/\D/g, '')
-                            if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2,6)
-                            setNovaDataAtipica({ ...novaDataAtipica, data: value })
-                            // Limpar erro quando usuário começar a digitar
-                            if (dataAtipicaError) setDataAtipicaError('')
-                          }}
-                          maxLength={7}
-                          className={`h-8 text-xs border-amber-200 focus:border-amber-400 bg-amber-50/50 ${
-                            dataAtipicaError ? 'border-red-300 focus:border-red-400' : ''
-                          }`}
-                        />
+                        <div className="relative">
+                          <Input
+                            type="text"
+                            placeholder="mm/aaaa"
+                            value={novaDataAtipica.data}
+                            onChange={(e) => {
+                              let value = e.target.value.replace(/\D/g, '')
+                              if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2,6)
+                              setNovaDataAtipica({ ...novaDataAtipica, data: value })
+                              // Limpar erro quando usuário começar a digitar
+                              if (dataAtipicaError) setDataAtipicaError('')
+                            }}
+                            maxLength={7}
+                            className={`h-8 text-xs border-amber-200 focus:border-amber-400 bg-amber-50/50 pr-6 ${
+                              dataAtipicaError ? 'border-red-300 focus:border-red-400' : ''
+                            }`}
+                          />
+                          {novaDataAtipica.data && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-amber-200"
+                              onClick={() => {
+                                setNovaDataAtipica({ ...novaDataAtipica, data: '' })
+                                if (dataAtipicaError) setDataAtipicaError('')
+                              }}
+                              title="Limpar Data"
+                            >
+                              <X className="h-2 w-2 text-amber-600" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <Label className="text-xs font-medium text-slate-600">Descrição</Label>
-                        <Input
-                          type="text"
-                          placeholder="Ex: Aumento de Preço"
-                          value={novaDataAtipica.descricao}
-                          onChange={(e) => setNovaDataAtipica({ ...novaDataAtipica, descricao: e.target.value })}
-                          className="h-8 text-xs border-amber-200 focus:border-amber-400 bg-amber-50/50"
-                        />
+                        <div className="relative">
+                          <Input
+                            type="text"
+                            placeholder="Ex: Aumento de Preço"
+                            value={novaDataAtipica.descricao}
+                            onChange={(e) => setNovaDataAtipica({ ...novaDataAtipica, descricao: e.target.value })}
+                            className="h-8 text-xs border-amber-200 focus:border-amber-400 bg-amber-50/50 pr-6"
+                          />
+                          {novaDataAtipica.descricao && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-amber-200"
+                              onClick={() => setNovaDataAtipica({ ...novaDataAtipica, descricao: '' })}
+                              title="Limpar Descrição"
+                            >
+                              <X className="h-2 w-2 text-amber-600" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <Button
                         type="button"
@@ -579,7 +650,7 @@ export default function DemandForecastPage() {
                             <div className="flex items-center justify-between">
                               <div className="flex-1 min-w-0">
                                 <div className="text-xs text-slate-700 font-medium truncate">
-                                  {formatDate(data.data)}
+{formatDate(data.dataInicial)}
                                 </div>
                                 <div className="text-xs text-slate-500 truncate">
                                   {data.descricao || '-'}
@@ -592,7 +663,7 @@ export default function DemandForecastPage() {
                                   size="sm"
                                   onClick={() => {
                                     setNovaDataAtipica({
-                                      data: data.data,
+                                      data: data.dataInicial,
                                       descricao: data.descricao || ''
                                     });
                                     removerDataAtipica(index);

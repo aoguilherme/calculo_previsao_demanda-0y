@@ -1,17 +1,32 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, BarChart3, Edit2, Save, X, Search, ChevronUp, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, Filter, Check, Edit, Cancel, Download } from 'lucide-react'
-import Link from 'next/link'
+import { toast } from "@/hooks/use-toast"
+import { Toaster } from "@/components/ui/toaster"
+import { ArrowUpDown, Filter, Search, X, Edit2, Save, BarChart3, Download, Upload, ArrowLeft, ChevronUp, ChevronDown } from 'lucide-react'
 import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
+
+// Função debounce customizada para evitar dependências externas
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null
+  return (...args: Parameters<T>) => {
+    if (timeout) clearTimeout(timeout)
+    timeout = setTimeout(() => func(...args), wait)
+  }
+}
 
 // Configuração do Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -29,49 +44,7 @@ interface PrevisaoDemanda {
 type SortField = 'sku' | 'fml_item' | 'media_prevista' | 'dt_implant' | 'calculo_realizado' | 'diferenca'
 type SortDirection = 'asc' | 'desc'
 
-// Componente super simplificado para item do checkbox de SKU
-const SkuCheckboxItem = ({ sku, isSelected, onToggle }: {
-  sku: string
-  isSelected: boolean
-  onToggle: (sku: string) => void
-}) => (
-  <div className="flex items-center space-x-2 h-8 w-full">
-    <Checkbox
-      checked={isSelected}
-      onCheckedChange={() => onToggle(sku)}
-      className="shrink-0"
-    />
-    <label
-      onClick={() => onToggle(sku)}
-      className="text-sm font-medium leading-none cursor-pointer flex-1 truncate select-none"
-      title={sku}
-    >
-      {sku}
-    </label>
-  </div>
-)
 
-// Componente super simplificado para item do checkbox de Família
-const FamiliaCheckboxItem = ({ familia, isSelected, onToggle }: {
-  familia: string
-  isSelected: boolean
-  onToggle: (familia: string) => void
-}) => (
-  <div className="flex items-center space-x-2 h-8 w-full">
-    <Checkbox
-      checked={isSelected}
-      onCheckedChange={() => onToggle(familia)}
-      className="shrink-0"
-    />
-    <label
-      onClick={() => onToggle(familia)}
-      className="text-sm font-medium leading-none cursor-pointer flex-1 truncate select-none"
-      title={familia}
-    >
-      {familia}
-    </label>
-  </div>
-)
 
 export default function AnaliseDadosPage() {
   const [dados, setDados] = useState<PrevisaoDemanda[]>([])
@@ -82,53 +55,59 @@ export default function AnaliseDadosPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveProgress, setSaveProgress] = useState('')
   
+  // Estados para virtualização da tabela
+  const [scrollTop, setScrollTop] = useState(0)
+  const [containerHeight] = useState(600) // altura fixa do container
+  const rowHeight = 40 // altura de cada linha
+  const overscan = 5 // linhas extras para renderizar fora da view
+  
   // Estados para filtro e ordenação
   const [sortField, setSortField] = useState<SortField>('sku')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   
-  // Estados para o checklist de SKUs
-  const [skuSearchTerm, setSkuSearchTerm] = useState('')
-  const [selectedSkus, setSelectedSkus] = useState<string[]>([])
-  const [isSkuPopoverOpen, setIsSkuPopoverOpen] = useState(false)
+  // Estados para filtros de texto (sem debounce para filtragem instantânea)
+  const [skuFilter, setSkuFilter] = useState('')
+  const [familiaSelectFilter, setFamiliaSelectFilter] = useState<string[]>([])
   
-  // Estados para o checklist de Famílias
-  const [familiaSearchTerm, setFamiliaSearchTerm] = useState('')
-  const [selectedFamilias, setSelectedFamilias] = useState<string[]>([])
-  const [isFamiliaPopoverOpen, setIsFamiliaPopoverOpen] = useState(false)
-  
-  // Removido cache de filtros para eliminar overhead
-  
-  // Lista de SKUs únicos (otimizada com useMemo)
-  const uniqueSkus = useMemo(() => {
-    const skus = dados.map(item => item.sku).sort()
-    return [...new Set(skus)]
-  }, [dados])
-  
-  // Lista de Famílias únicas (otimizada com useMemo)
-  const uniqueFamilias = useMemo(() => {
-    const familias = dados
-      .map(item => item.fml_item || '')
-      .filter(familia => familia.trim() !== '')
-      .sort()
-    return [...new Set(familias)]
-  }, [dados])
-  
-  // Sets simples para verificação rápida
-  const selectedSkusSet = new Set(selectedSkus)
-  const selectedFamiliasSet = new Set(selectedFamilias)
-  
-  // Reset quando o popover fecha
-  useEffect(() => {
-    if (!isSkuPopoverOpen) {
-      setSkuSearchTerm('')
-    }
-  }, [isSkuPopoverOpen])
-  
-  useEffect(() => {
-    if (!isFamiliaPopoverOpen) {
-      setFamiliaSearchTerm('')
-    }
-  }, [isFamiliaPopoverOpen])
+  // Opções de família PA-001 a PA-018
+  const familiaOptions = Array.from({ length: 18 }, (_, i) => {
+    const num = (i + 1).toString().padStart(3, '0')
+    return `PA-${num}`
+  })
+
+  // Dados filtrados serão definidos após dadosComDiferenca
+
+  // Handlers para filtros otimizados
+  const handleSkuFilterChange = useCallback((value: string) => {
+    setSkuFilter(value)
+  }, [])
+
+
+
+  const handleFamiliaSelectChange = useCallback((familia: string, checked: boolean) => {
+    setFamiliaSelectFilter(prev => {
+      if (checked) {
+        return [...prev, familia]
+      } else {
+        return prev.filter(f => f !== familia)
+      }
+    })
+  }, [])
+
+  const clearSkuFilter = useCallback(() => {
+    setSkuFilter('')
+  }, [])
+
+
+
+  const clearFamiliaSelectFilter = useCallback(() => {
+    setFamiliaSelectFilter([])
+  }, [])
+
+  const clearAllFilters = useCallback(() => {
+    setSkuFilter('')
+    setFamiliaSelectFilter([])
+  }, [])
   
   // Não inicializar selectedSkus - deixar vazio por padrão para mostrar todos os dados
   // useEffect removido para permitir que todos os dados sejam mostrados quando nenhum SKU estiver selecionado
@@ -323,104 +302,13 @@ export default function AnaliseDadosPage() {
 
   // Função para ordenação (otimizada)
   const handleSort = useCallback((field: SortField) => {
-    startTransition(() => {
-      setSortField(field)
-      setSortDirection(prev => 
-        sortField === field && prev === 'asc' ? 'desc' : 'asc'
-      )
-    })
+    setSortField(field)
+    setSortDirection(prev => 
+      sortField === field && prev === 'asc' ? 'desc' : 'asc'
+    )
   }, [sortField])
 
-  // Filtrar SKUs baseado na pesquisa (ultra simplificado)
-  const filteredSkus = useMemo(() => {
-    const searchTerm = skuSearchTerm.toLowerCase().trim()
-    
-    if (!searchTerm) {
-      return uniqueSkus.slice(0, 50) // Mostrar apenas 50 iniciais
-    }
-    
-    // Filtrar diretamente sem interdependências
-    return uniqueSkus
-      .filter(sku => sku.toLowerCase().includes(searchTerm))
-      .slice(0, 30) // Limitar ainda mais para performance
-  }, [uniqueSkus, skuSearchTerm])
-  
-  // Filtrar Famílias baseado na pesquisa (ultra simplificado)
-  const filteredFamilias = useMemo(() => {
-    const searchTerm = familiaSearchTerm.toLowerCase().trim()
-    
-    if (!searchTerm) {
-      return uniqueFamilias.slice(0, 50) // Mostrar apenas 50 iniciais
-    }
-    
-    // Filtrar diretamente sem interdependências
-    return uniqueFamilias
-      .filter(familia => familia.toLowerCase().includes(searchTerm))
-      .slice(0, 30) // Limitar ainda mais para performance
-  }, [uniqueFamilias, familiaSearchTerm])
-  
-  // Renderização simples sem virtualização complexa
-  const displayedSkus = useMemo(() => {
-    return filteredSkus.slice(0, 50) // Mostrar apenas os primeiros 50 para melhor performance
-  }, [filteredSkus])
-  
-  const displayedFamilias = useMemo(() => {
-    return filteredFamilias.slice(0, 50) // Mostrar apenas as primeiras 50 para melhor performance
-  }, [filteredFamilias])
-  
-  // Indicador se há mais SKUs para mostrar
-  const hasMoreSkus = uniqueSkus.length > (skuSearchTerm ? 30 : 50)
-  
-  // Indicador se há mais Famílias para mostrar
-  const hasMoreFamilias = uniqueFamilias.length > (familiaSearchTerm ? 30 : 50)
-  
-  // Função para alternar seleção de SKU (simplificada)
-  const toggleSku = (sku: string) => {
-    setSelectedSkus(prev => {
-      const isSelected = prev.includes(sku)
-      if (isSelected) {
-        return prev.filter(s => s !== sku)
-      } else {
-        return [...prev, sku]
-      }
-    })
-  }
-  
-  // Função para alternar seleção de Família (simplificada)
-  const toggleFamilia = (familia: string) => {
-    setSelectedFamilias(prev => {
-      const isSelected = prev.includes(familia)
-      if (isSelected) {
-        return prev.filter(f => f !== familia)
-      } else {
-        return [...prev, familia]
-      }
-    })
-  }
-  
-  // Função para selecionar/deselecionar todos os SKUs (simplificada)
-  const toggleAllSkus = () => {
-    if (selectedSkus.length === filteredSkus.length) {
-      setSelectedSkus([])
-    } else {
-      setSelectedSkus([...filteredSkus])
-    }
-  }
-  
-  // Função para selecionar/deselecionar todas as Famílias (simplificada)
-  const toggleAllFamilias = () => {
-    if (selectedFamilias.length === filteredFamilias.length) {
-      setSelectedFamilias([])
-    } else {
-      setSelectedFamilias([...filteredFamilias])
-    }
-  }
-  
-  // Função para limpar seleção de SKUs (simplificada)
-  const clearSkuSelection = () => setSelectedSkus([])
 
-  // Função para limpar seleção de Famílias (simplificada)
-  const clearFamiliaSelection = () => setSelectedFamilias([])
 
 
 
@@ -434,6 +322,34 @@ export default function AnaliseDadosPage() {
     }))
   }, [dados])
 
+  // Dados filtrados otimizados
+  const dadosFiltrados = useMemo(() => {
+    // Early return se não há dados
+    if (dadosComDiferenca.length === 0) return []
+    
+    // Verificar se há filtros ativos
+    const hasSkuFilter = skuFilter.trim().length > 0
+    const hasFamiliaSelectFilter = familiaSelectFilter.length > 0
+    
+    if (!hasSkuFilter && !hasFamiliaSelectFilter) {
+      return dadosComDiferenca
+    }
+    
+    // Pré-processar termos de filtro uma vez
+    const skuTerm = hasSkuFilter ? skuFilter.toLowerCase().trim() : ''
+    
+    // Filtra em uma única passagem
+    return dadosComDiferenca.filter(item => {
+      if (hasSkuFilter && !item.sku.toLowerCase().includes(skuTerm)) {
+        return false
+      }
+      if (hasFamiliaSelectFilter && !familiaSelectFilter.includes(item.fml_item || '')) {
+        return false
+      }
+      return true
+    })
+  }, [dadosComDiferenca, skuFilter, familiaSelectFilter])
+
   // Função para verificar se uma data é do ano atual
   const isCurrentYear = useCallback((dateString: string | null | undefined) => {
     if (!dateString) return false
@@ -442,73 +358,91 @@ export default function AnaliseDadosPage() {
     return itemYear === currentYear
   }, [])
 
-  // Dados filtrados e ordenados (mostrando todos os itens)
+  // Dados filtrados e ordenados otimizados
   const dadosProcessados = useMemo(() => {
-    // Aplicar filtro por SKUs selecionados usando Set para O(1) lookup
-    let filtered = selectedSkus.length > 0 
-      ? dadosComDiferenca.filter(item => selectedSkusSet.has(item.sku))
-      : dadosComDiferenca
+    // Early return se não há dados
+    if (dadosComDiferenca.length === 0) return []
 
-    // Aplicar filtro por Famílias selecionadas usando Set para O(1) lookup
-    if (selectedFamilias.length > 0) {
-      filtered = filtered.filter(item => selectedFamiliasSet.has(item.fml_item || ''))
-    }
+    // Usar dados filtrados por texto em vez de seleção
+    let filtered = dadosFiltrados
 
-    // Se não há dados para processar, retornar array vazio
+    // Se não há dados após filtros, retornar array vazio
     if (filtered.length === 0) return []
+
+    // Aplicar ordenação otimizada apenas se necessário
+    if (!sortField) return filtered
 
     // Criar uma cópia para ordenação (evita mutação do array original)
     const sorted = [...filtered]
 
-    // Aplicar ordenação otimizada
-    if (sortField) {
-      sorted.sort((a, b) => {
-        let aValue: any
-        let bValue: any
+    // Aplicar ordenação otimizada com cache de valores
+    sorted.sort((a, b) => {
+      let aValue: any
+      let bValue: any
 
-        switch (sortField) {
-          case 'sku':
-            aValue = a.sku
-            bValue = b.sku
-            break
-          case 'fml_item':
-            aValue = a.fml_item || ''
-            bValue = b.fml_item || ''
-            break
-          case 'media_prevista':
-            aValue = a.media_prevista || 0
-            bValue = b.media_prevista || 0
-            break
-          case 'dt_implant':
-            aValue = a.dt_implant || ''
-            bValue = b.dt_implant || ''
-            break
-          case 'calculo_realizado':
-            aValue = a.calculo_realizado || 0
-            bValue = b.calculo_realizado || 0
-            break
-          case 'diferenca':
-            // Cache dos cálculos de diferença para evitar recálculo
-            aValue = a.diferencaCalculada
-            bValue = b.diferencaCalculada
-            break
-          default:
-            return 0
-        }
+      switch (sortField) {
+        case 'sku':
+          aValue = a.sku
+          bValue = b.sku
+          break
+        case 'fml_item':
+          aValue = a.fml_item || ''
+          bValue = b.fml_item || ''
+          break
+        case 'media_prevista':
+          aValue = a.media_prevista || 0
+          bValue = b.media_prevista || 0
+          break
+        case 'dt_implant':
+          aValue = a.dt_implant || ''
+          bValue = b.dt_implant || ''
+          break
+        case 'calculo_realizado':
+          aValue = a.calculo_realizado || 0
+          bValue = b.calculo_realizado || 0
+          break
+        case 'diferenca':
+          // Cache dos cálculos de diferença para evitar recálculo
+          aValue = a.diferencaCalculada
+          bValue = b.diferencaCalculada
+          break
+        default:
+          return 0
+      }
 
-        if (typeof aValue === 'string' && typeof bValue === 'string') {
-          const comparison = aValue.localeCompare(bValue)
-          return sortDirection === 'asc' ? comparison : -comparison
-        } else {
-          const comparison = (aValue || 0) - (bValue || 0)
-          return sortDirection === 'asc' ? comparison : -comparison
-        }
-      })
-    }
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        const comparison = aValue.localeCompare(bValue)
+        return sortDirection === 'asc' ? comparison : -comparison
+      } else {
+        const comparison = (aValue || 0) - (bValue || 0)
+        return sortDirection === 'asc' ? comparison : -comparison
+      }
+    })
 
-    // Retornar todos os dados sem limitação
     return sorted
-  }, [dadosComDiferenca, selectedSkus, selectedSkusSet, selectedFamilias, selectedFamiliasSet, sortField, sortDirection])
+  }, [dadosFiltrados, sortField, sortDirection, dadosComDiferenca])
+
+  // Virtualização da tabela - calcular itens visíveis
+  const virtualizedData = useMemo(() => {
+    const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan)
+    const endIndex = Math.min(
+      dadosProcessados.length,
+      Math.ceil((scrollTop + containerHeight) / rowHeight) + overscan
+    )
+    
+    return {
+      items: dadosProcessados.slice(startIndex, endIndex),
+      startIndex,
+      endIndex,
+      totalHeight: dadosProcessados.length * rowHeight,
+      offsetY: startIndex * rowHeight
+    }
+  }, [dadosProcessados, scrollTop, containerHeight, rowHeight, overscan])
+
+  // Handler para scroll da tabela
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop)
+  }, [])
 
   if (loading) {
     return (
@@ -553,196 +487,116 @@ export default function AnaliseDadosPage() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Card className="bg-white/90 backdrop-blur-sm shadow-xl border-0 rounded-2xl">
-          <CardHeader className="bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-t-2xl">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Popover open={isSkuPopoverOpen} onOpenChange={setIsSkuPopoverOpen}>
-                  <PopoverTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      className="w-48 justify-between bg-white/10 border-white/20 text-white hover:bg-white/20"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Search className="w-4 h-4" />
-                        SKU ({selectedSkus.length > 0 ? selectedSkus.length : 'Todos'})
-                      </span>
-                      <ChevronDown className="w-4 h-4" />
-                    </Button>
-                  </PopoverTrigger>
-                <PopoverContent className="w-80 p-0" align="start">
-                    <div className="p-3 border-b">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-                        <Input
-                          placeholder="Pesquisar SKU..."
-                          value={skuSearchTerm}
-                          onChange={(e) => setSkuSearchTerm(e.target.value)}
-                          className="pl-10 pr-10"
-                          autoComplete="off"
-                          spellCheck={false}
-                        />
-                        {skuSearchTerm && (
-                          <button
-                            onClick={() => setSkuSearchTerm('')}
-                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                            type="button"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="p-3">
-                      <div className="flex items-center justify-between mb-3">
+          <CardHeader className="bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-t-2xl p-2">
+            {/* Seção de Filtros Compacta */}
+            <div className="p-2">
+              <div className="flex items-center gap-2 mb-2">
+                <Filter className="w-4 h-4 text-white/80" />
+                <h3 className="text-sm font-semibold text-white">Filtros</h3>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-6 flex-wrap">
+                  {/* Filtro por SKU */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-white/80 whitespace-nowrap">Código do Item:</label>
+                    <div className="relative w-64">
+                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-white/60 w-3 h-3" />
+                    <Input
+                      placeholder="Digite o código..."
+                      value={skuFilter}
+                      onChange={(e) => handleSkuFilterChange(e.target.value)}
+                      className="pl-7 pr-7 bg-white/10 border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40 h-12 text-sm transition-all duration-200 w-full"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    {skuFilter && (
+                      <button
+                        onClick={clearSkuFilter}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white transition-colors"
+                        type="button"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                  {/* Filtro por Família (Checkboxes) */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-white/80 whitespace-nowrap">Família do Produto:</label>
+                    <div className="w-64">
+                    <Popover>
+                      <PopoverTrigger asChild>
                         <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={toggleAllSkus}
-                          className="h-auto p-0 text-sm font-medium"
+                          variant="outline"
+                          className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/40 h-12 text-sm transition-all duration-200 w-full justify-between"
                         >
-                          {filteredSkus.length > 0 && filteredSkus.every(sku => selectedSkusSet.has(sku)) 
-                            ? 'Desmarcar visíveis' 
-                            : 'Selecionar visíveis'
-                          }
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={clearSkuSelection}
-                          className="h-auto p-0 text-sm text-red-600 hover:text-red-700"
-                        >
-                          Limpar
-                        </Button>
-                      </div>
-                      
-                      <div className="max-h-64 overflow-y-auto space-y-1">
-                        {displayedSkus.map((sku) => (
-                          <SkuCheckboxItem
-                            key={sku}
-                            sku={sku}
-                            isSelected={selectedSkusSet.has(sku)}
-                            onToggle={toggleSku}
-                          />
-                        ))}
-                      </div>
-                      
-                      {filteredSkus.length === 0 && (
-                        <div className="text-center py-4 text-sm text-slate-500">
-                          Nenhum SKU encontrado
-                        </div>
-                      )}
-                      
-                      {filteredSkus.length > 0 && (
-                        <div className="text-center py-2 text-xs text-slate-400 border-t">
-                          {`${filteredSkus.length} SKUs ${hasMoreSkus ? '(mostrando primeiros 50)' : 'encontrados'}`}
-                        </div>
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                
-                <Popover open={isFamiliaPopoverOpen} onOpenChange={setIsFamiliaPopoverOpen}>
-                  <PopoverTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      className="w-48 justify-between bg-white/10 border-white/20 text-white hover:bg-white/20"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Filter className="w-4 h-4" />
-                        Família ({selectedFamilias.length > 0 ? selectedFamilias.length : 'Todas'})
-                      </span>
-                      <ChevronDown className="w-4 h-4" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80 p-0" align="start">
-                      <div className="p-3 border-b">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-                          <Input
-                            placeholder="Pesquisar Família..."
-                            value={familiaSearchTerm}
-                            onChange={(e) => setFamiliaSearchTerm(e.target.value)}
-                            className="pl-10 pr-10"
-                            autoComplete="off"
-                            spellCheck={false}
-                          />
-                          {familiaSearchTerm && (
-                            <button
-                              onClick={() => setFamiliaSearchTerm('')}
-                              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                              type="button"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="p-3">
-                        <div className="flex items-center justify-between mb-3">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={toggleAllFamilias}
-                            className="h-auto p-0 text-sm font-medium"
-                          >
-                            {filteredFamilias.length > 0 && filteredFamilias.every(familia => selectedFamiliasSet.has(familia)) 
-                              ? 'Desmarcar visíveis' 
-                              : 'Selecionar visíveis'
+                          <span className="truncate">
+                            {familiaSelectFilter.length === 0 
+                              ? "Selecione famílias..." 
+                              : `${familiaSelectFilter.length} selecionada(s)`
                             }
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={clearFamiliaSelection}
-                            className="h-auto p-0 text-sm text-red-600 hover:text-red-700"
-                          >
-                            Limpar
-                          </Button>
-                        </div>
-                        
-                        <div className="max-h-64 overflow-y-auto space-y-1">
-                          {displayedFamilias.map((familia) => (
-                            <FamiliaCheckboxItem
-                              key={familia}
-                              familia={familia}
-                              isSelected={selectedFamiliasSet.has(familia)}
-                              onToggle={toggleFamilia}
-                            />
+                          </span>
+                          <ChevronDown className="w-3 h-3 ml-2 flex-shrink-0" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-48 p-2 bg-slate-800 border-slate-700">
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {familiaOptions.map((familia) => (
+                            <div key={familia} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={familia}
+                                checked={familiaSelectFilter.includes(familia)}
+                                onCheckedChange={(checked) => handleFamiliaSelectChange(familia, checked as boolean)}
+                                className="border-white/20 data-[state=checked]:bg-white data-[state=checked]:border-white"
+                              />
+                              <label
+                                htmlFor={familia}
+                                className="text-sm text-white cursor-pointer flex-1"
+                              >
+                                {familia}
+                              </label>
+                            </div>
                           ))}
                         </div>
-                        
-                        {filteredFamilias.length === 0 && (
-                          <div className="text-center py-4 text-sm text-slate-500">
-                            Nenhuma Família encontrada
+                        {familiaSelectFilter.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-slate-600">
+                            <Button
+                              onClick={clearFamiliaSelectFilter}
+                              variant="outline"
+                              size="sm"
+                              className="w-full h-6 text-xs bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+                            >
+                              Limpar Seleção
+                            </Button>
                           </div>
                         )}
-                        
-                        {filteredFamilias.length > 0 && (
-                          <div className="text-center py-2 text-xs text-slate-400 border-t">
-                            {`${filteredFamilias.length} Famílias ${hasMoreFamilias ? '(mostrando primeiras 50)' : 'encontradas'}`}
-                          </div>
-                        )}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 </div>
-              
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleSaveAndExport}
-                  disabled={isSaving || dadosProcessados.length === 0}
-                  variant="outline"
-                  size="sm"
-                  className="bg-white/10 border-white/20 text-white hover:bg-white/20 px-3 py-1"
-                >
-                  {isSaving ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Download className="w-4 h-4" />
-                  )}
-                </Button>
+
+                </div>
+                
+                {/* Botão Exportar no centro-direita */}
+                <div className="flex items-center">
+                  <Button
+                    onClick={handleSaveAndExport}
+                    disabled={isSaving || dadosProcessados.length === 0}
+                    variant="outline"
+                    size="sm"
+                    className="bg-emerald-800 border-emerald-600 text-emerald-100 hover:bg-emerald-700 hover:border-emerald-500 h-8 px-3 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={isSaving ? 'Salvando...' : 'Salvar e Exportar'}
+                  >
+                    {isSaving ? (
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-emerald-300"></div>
+                    ) : (
+                      <Download className="w-3 h-3 mr-1" />
+                    )}
+                    {!isSaving && "Exportar"}
+                  </Button>
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -878,125 +732,147 @@ export default function AnaliseDadosPage() {
                    </TableHeader>
                  </Table>
                </div>
-               <div className="flex-1 overflow-auto">
-                 <Table>
-                   <TableHeader className="sr-only">
-                     <TableRow>
-                       <TableHead className="w-32">Código Item</TableHead>
-                       <TableHead className="w-20">Família</TableHead>
-                       <TableHead className="w-24">Média Atual</TableHead>
-                       <TableHead className="w-24">Data Implant.</TableHead>
-                       <TableHead className="w-28">Cálculo Realizado</TableHead>
-                       <TableHead className="text-center w-24">Diferença (%)</TableHead>
-                        <TableHead className="text-center w-20">Ações</TableHead>
-                     </TableRow>
-                   </TableHeader>
-                  <TableBody>
-                    {dadosProcessados.map((item) => {
-                      const isCurrentYearDate = isCurrentYear(item.dt_implant)
-                      return (
-                        <TableRow 
-                          key={item.sku} 
-                          className={`h-10 transition-colors ${
-                            isCurrentYearDate 
-                              ? 'bg-[#C3E1DC] hover:bg-[#B8D6D0]' 
-                              : 'hover:bg-slate-50/50'
-                          }`}
-                        >
-                        <TableCell className="font-medium py-2 text-sm w-32">{item.sku}</TableCell>
-                        <TableCell className="py-2 text-sm w-20">{item.fml_item || '-'}</TableCell>
-                        <TableCell className="py-2 text-sm w-24">{item.media_prevista.toLocaleString('pt-BR', { maximumFractionDigits: 0, useGrouping: true }).replace(/,/g, '.')}</TableCell>
-                        <TableCell className="py-2 text-sm w-24">
-                          {item.dt_implant ? item.dt_implant.split('T')[0].split('-').reverse().join('/') : '-'}
-                        </TableCell>
-                        <TableCell className="py-2 text-sm w-28">
-                          {editingRow === item.sku ? (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                className="w-20 h-6 text-sm"
-                                autoFocus
-                              />
-                            </div>
-                          ) : (
-                            <span className={item.calculo_realizado ? '' : 'text-slate-400'}>
-                              {item.calculo_realizado ? item.calculo_realizado.toLocaleString('pt-BR', { maximumFractionDigits: 0, useGrouping: true }).replace(/,/g, '.') : '0'}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center py-2 w-24">
-                           <span className={`font-medium text-sm ${
-                             item.calculo_realizado && item.calculo_realizado > 0
-                               ? item.diferencaCalculada > 0
-                                 ? 'text-green-600'
-                                 : item.diferencaCalculada < 0
-                                   ? 'text-red-600'
-                                   : 'text-slate-500'
-                               : 'text-slate-500'
-                           }`}>
-                             {item.calculo_realizado && item.calculo_realizado > 0 
-                                ? `${item.diferencaCalculada < 0 ? '-' : ''}${Math.abs(item.diferencaCalculada).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
-                                : '-'
-                              }
-                           </span>
-                         </TableCell>
-                        <TableCell className="text-center py-2 w-20">
-                          {editingRow === item.sku ? (
-                            <div className="flex items-center justify-center gap-1">
-                              <Button
-                                size="sm"
-                                onClick={salvarEdicao}
-                                className="h-6 w-6 p-0 bg-green-600 hover:bg-green-700"
-                              >
-                                <Save className="w-2 h-2" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={cancelarEdicao}
-                                className="h-6 w-6 p-0"
-                              >
-                                <X className="w-2 h-2" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <div className="flex justify-center">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => iniciarEdicao(item.sku, item.calculo_realizado)}
-                                className="h-6 w-6 p-0 hover:bg-blue-100"
-                              >
-                                <Edit2 className="w-2 h-2" />
-                              </Button>
-                            </div>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
+               <div 
+                 className="flex-1 overflow-auto"
+                 style={{ height: containerHeight }}
+                 onScroll={handleScroll}
+               >
+                 <div style={{ height: virtualizedData.totalHeight, position: 'relative' }}>
+                   <Table>
+                     <TableHeader className="sr-only">
+                       <TableRow>
+                         <TableHead className="w-32">Código Item</TableHead>
+                         <TableHead className="w-20">Família</TableHead>
+                         <TableHead className="w-24">Média Atual</TableHead>
+                         <TableHead className="w-24">Data Implant.</TableHead>
+                         <TableHead className="w-28">Cálculo Realizado</TableHead>
+                         <TableHead className="text-center w-24">Diferença (%)</TableHead>
+                          <TableHead className="text-center w-20">Ações</TableHead>
+                       </TableRow>
+                     </TableHeader>
+                    <TableBody>
+                      <tr style={{ height: virtualizedData.offsetY }}></tr>
+                      {virtualizedData.items.map((item) => {
+                        const isCurrentYearDate = isCurrentYear(item.dt_implant)
+                        return (
+                          <TableRow 
+                            key={item.sku} 
+                            className={`h-10 transition-colors ${
+                              isCurrentYearDate 
+                                ? 'bg-[#C3E1DC] hover:bg-[#B8D6D0]' 
+                                : 'hover:bg-slate-50/50'
+                            }`}
+                            style={{ height: rowHeight }}
+                          >
+                          <TableCell className="font-medium py-2 text-sm w-32">{item.sku}</TableCell>
+                          <TableCell className="text-center py-2 text-sm w-20">{item.fml_item || '-'}</TableCell>
+                           <TableCell className="text-center py-2 text-sm w-24">{item.media_prevista.toLocaleString('pt-BR', { maximumFractionDigits: 0, useGrouping: true }).replace(/,/g, '.')}</TableCell>
+                           <TableCell className="text-center py-2 text-sm w-24">
+                             {item.dt_implant ? item.dt_implant.split('T')[0].split('-').reverse().join('/') : '-'}
+                           </TableCell>
+                           <TableCell className="text-center py-2 text-sm w-28">
+                             {editingRow === item.sku ? (
+                               <div className="flex items-center justify-center gap-2">
+                                 <Input
+                                   type="number"
+                                   step="0.01"
+                                   value={editValue}
+                                   onChange={(e) => setEditValue(e.target.value)}
+                                   className="w-20 h-6 text-sm text-center"
+                                   autoFocus
+                                 />
+                               </div>
+                             ) : (
+                               <span className={item.calculo_realizado ? '' : 'text-slate-400'}>
+                                 {item.calculo_realizado ? item.calculo_realizado.toLocaleString('pt-BR', { maximumFractionDigits: 0, useGrouping: true }).replace(/,/g, '.') : '0'}
+                               </span>
+                             )}
+                           </TableCell>
+                           <TableCell className="text-center py-2 w-24">
+                              <span className={`font-medium text-sm ${
+                                item.calculo_realizado && item.calculo_realizado > 0
+                                  ? item.diferencaCalculada > 0
+                                    ? 'text-green-600'
+                                    : item.diferencaCalculada < 0
+                                      ? 'text-red-600'
+                                      : 'text-slate-500'
+                                  : 'text-slate-500'
+                              }`}>
+                                {item.calculo_realizado && item.calculo_realizado > 0 
+                                   ? `${item.diferencaCalculada < 0 ? '-' : ''}${Math.abs(item.diferencaCalculada).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+                                   : '-'
+                                 }
+                              </span>
+                            </TableCell>
+                           <TableCell className="text-center py-2 w-20">
+                            {editingRow === item.sku ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  size="sm"
+                                  onClick={salvarEdicao}
+                                  className="h-6 w-6 p-0 bg-green-600 hover:bg-green-700"
+                                >
+                                  <Save className="w-2 h-2" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={cancelarEdicao}
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <X className="w-2 h-2" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex justify-center">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => iniciarEdicao(item.sku, item.calculo_realizado)}
+                                  className="h-6 w-6 p-0 hover:bg-blue-100"
+                                >
+                                  <Edit2 className="w-2 h-2" />
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </div>
             
             {dadosProcessados.length === 0 && (
               <div className="text-center py-8 text-slate-500">
                 <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                {selectedSkus.length > 0 ? (
+                {(skuFilter || familiaFilter) ? (
                   <div>
-                    <p className="mb-2">Nenhum item encontrado para os SKUs selecionados</p>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={clearSkuSelection}
-                      className="text-blue-600 hover:text-blue-700"
-                    >
-                      Limpar filtro
-                    </Button>
+                    <p className="mb-2">Nenhum item encontrado para os filtros aplicados</p>
+                    <div className="flex gap-2 justify-center">
+                      {skuFilter && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={clearSkuFilter}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          Limpar filtro SKU
+                        </Button>
+                      )}
+                      {familiaFilter && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={clearFamiliaFilter}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          Limpar filtro Família
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <p>Nenhum dado encontrado</p>
