@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { X, FileText, BarChart3, Upload, CheckCircle, Calendar, Plus, Edit2, Trash2, Calculator, ArrowRight, AlertTriangle, AlertCircle } from "lucide-react"
 import { calculateDemandForecast } from "./actions"
+import { clearPrevisoesDemanda } from "./clearTableAction"
 
 export default function DemandForecastPage() {
   // Mova todos os estados para dentro do componente
@@ -59,11 +60,14 @@ export default function DemandForecastPage() {
   // Estados para controlar os valores dos campos
   const [fieldValues, setFieldValues] = useState(defaultValues)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedMediaFile, setSelectedMediaFile] = useState<File | null>(null)
   const [csvData, setCsvData] = useState<Array<{data: Date, sku: string, familia: string, vendas: number}>>([]) // Dados do CSV processados
 
   const [showResultPopup, setShowResultPopup] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState('')
+  const [isClearingTable, setIsClearingTable] = useState(false)
+  const [clearTableMessage, setClearTableMessage] = useState('')
 
   // Controlar popup de resultados
   useEffect(() => {
@@ -80,6 +84,33 @@ export default function DemandForecastPage() {
     }
     // Caso contrário, converte de ISO para mm/aaaa
     return formatDateToBR(dateString)
+  }
+
+  // Função para excluir todos os dados da tabela
+  const handleClearTable = async () => {
+    if (!confirm('Tem certeza que deseja excluir TODOS os dados da tabela previsoes_demanda? Esta ação não pode ser desfeita!')) {
+      return
+    }
+
+    setIsClearingTable(true)
+    setClearTableMessage('')
+
+    try {
+      const result = await clearPrevisoesDemanda()
+      
+      if (result.success) {
+        setClearTableMessage(result.message || 'Dados excluídos com sucesso!')
+        setTimeout(() => setClearTableMessage(''), 3000)
+      } else {
+        setClearTableMessage(`Erro: ${result.error}`)
+        setTimeout(() => setClearTableMessage(''), 5000)
+      }
+    } catch (error) {
+      setClearTableMessage(`Erro inesperado: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+      setTimeout(() => setClearTableMessage(''), 5000)
+    } finally {
+      setIsClearingTable(false)
+    }
   }
 
   // Adicione estas funções para gerenciar as datas atípicas
@@ -278,6 +309,23 @@ export default function DemandForecastPage() {
     if (fileInput) fileInput.value = ""
   }
 
+  const handleMediaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file && file.type === "text/csv") {
+      setSelectedMediaFile(file)
+    } else {
+      alert("Por favor, selecione um arquivo CSV válido.")
+      event.target.value = ""
+    }
+  }
+
+  const removeMediaFile = () => {
+    setSelectedMediaFile(null)
+    // Reset file input value
+    const fileInput = document.getElementById("csvMediaFile") as HTMLInputElement
+    if (fileInput) fileInput.value = ""
+  }
+
 
 
   return (
@@ -317,20 +365,43 @@ export default function DemandForecastPage() {
                   </CardTitle>
                   <p className="text-slate-300 text-sm mt-1">Preencha os dados necessários para iniciar o processamento</p>
                 </div>
-                <Link href="/analise-dados">
+                <div className="flex gap-2">
+                  <Link href="/analise-dados">
+                    <Button 
+                      type="button"
+                      variant="outline" 
+                      size="sm"
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/30 transition-all duration-200"
+                    >
+                      <BarChart3 className="w-4 h-4 mr-2" />
+                      Análise de Dados
+                    </Button>
+                  </Link>
                   <Button 
                     type="button"
                     variant="outline" 
                     size="sm"
-                    className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/30 transition-all duration-200"
+                    onClick={handleClearTable}
+                    disabled={isClearingTable}
+                    className="bg-red-500/10 border-red-400/20 text-red-200 hover:bg-red-500/20 hover:border-red-400/30 transition-all duration-200 disabled:opacity-50"
                   >
-                    <BarChart3 className="w-4 h-4 mr-2" />
-                    Análise de Dados
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    {isClearingTable ? 'Excluindo...' : 'Limpar Tabela'}
                   </Button>
-                </Link>
+                </div>
               </div>
             </div>
           <CardContent className="flex-1 p-4 overflow-hidden">
+            {/* Mensagem de feedback para exclusão da tabela */}
+            {clearTableMessage && (
+              <div className={`mb-4 p-3 rounded-lg text-sm font-medium ${
+                clearTableMessage.includes('sucesso') 
+                  ? 'bg-green-100 text-green-800 border border-green-200' 
+                  : 'bg-red-100 text-red-800 border border-red-200'
+              }`}>
+                {clearTableMessage}
+              </div>
+            )}
             <form action={action} className="h-full flex flex-col">
               {/* Compact Grid Layout */}
               <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden">
@@ -397,8 +468,29 @@ export default function DemandForecastPage() {
                         type="file"
                         accept=".csv"
                         className="flex-1 h-9 text-xs border-2 border-dashed border-green-300 bg-white/50 hover:border-green-400 transition-colors file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700"
+                        onChange={handleMediaFileChange}
                       />
+                      {selectedMediaFile && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={removeMediaFile}
+                          className="h-9 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          title="Remover arquivo"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
+                    {selectedMediaFile && (
+                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-xs text-green-700 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          {selectedMediaFile.name}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
 
@@ -432,7 +524,10 @@ export default function DemandForecastPage() {
                             value={fieldValues.dataInicio}
                             onChange={(e) => {
                               let value = e.target.value.replace(/\D/g, '')
-                              if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2,6)
+                              // Formatação automática: adiciona '/' após 2 dígitos
+                              if (value.length >= 2) {
+                                value = value.slice(0,2) + '/' + value.slice(2,6)
+                              }
                               handleFieldChange("dataInicio", value)
                             }}
                             maxLength={7}
@@ -471,7 +566,10 @@ export default function DemandForecastPage() {
                             value={fieldValues.dataFim}
                             onChange={(e) => {
                               let value = e.target.value.replace(/\D/g, '')
-                              if (value.length >= 2) value = value.slice(0,2) + '/' + value.slice(2,6)
+                              // Formatação automática: adiciona '/' após 2 dígitos
+                              if (value.length >= 2) {
+                                value = value.slice(0,2) + '/' + value.slice(2,6)
+                              }
                               handleFieldChange("dataFim", value)
                             }}
                             maxLength={7}

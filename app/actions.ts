@@ -87,6 +87,137 @@ export async function calculateDemandForecast(
     const supabase = createClient()
     console.log('✅ Cliente Supabase criado com sucesso')
 
+    // PRIMEIRA FUNÇÃO: Verificar e processar arquivo de médias dos itens
+    const csvMediaFile = formData.get("csvMediaFile") as File
+    
+    // Verificar se o arquivo de médias foi anexado
+    if (!csvMediaFile || csvMediaFile.size === 0) {
+      console.log('❌ Arquivo de médias dos itens não foi anexado')
+      return { success: false, error: "É obrigatório anexar o arquivo 'Anexar médias dos itens' para calcular a previsão." }
+    }
+    
+    console.log('📋 Processando arquivo de médias dos itens...')
+    
+    try {
+      // 1. Excluir todos os dados da tabela previsoes_demanda
+      console.log('🗑️ Excluindo todos os dados da tabela previsoes_demanda...')
+      
+      // Primeiro, tentar buscar todos os registros para verificar se a tabela existe
+      const { data: existingData, error: selectError } = await supabase
+        .from('previsoes_demanda')
+        .select('id')
+        .limit(1)
+      
+      if (selectError) {
+        console.error('❌ Erro ao acessar tabela previsoes_demanda:', selectError)
+        return { success: false, error: `Erro ao acessar tabela: ${selectError.message}` }
+      }
+      
+      // Usar múltiplas tentativas para deletar todos os dados
+      let deleteAttempts = 0
+      const maxAttempts = 3
+      let allDeleted = false
+      
+      while (!allDeleted && deleteAttempts < maxAttempts) {
+        deleteAttempts++
+        console.log(`🔄 Tentativa ${deleteAttempts} de limpeza da tabela...`)
+        
+        // Buscar todos os IDs existentes
+        const { data: allRecords, error: fetchError } = await supabase
+          .from('previsoes_demanda')
+          .select('id')
+        
+        if (fetchError) {
+          console.error('❌ Erro ao buscar registros:', fetchError)
+          return { success: false, error: `Erro ao buscar registros: ${fetchError.message}` }
+        }
+        
+        if (!allRecords || allRecords.length === 0) {
+          console.log('✅ Tabela já está vazia')
+          allDeleted = true
+          break
+        }
+        
+        console.log(`📊 Encontrados ${allRecords.length} registros para deletar`)
+        
+        // Deletar em lotes de 1000 registros
+        const batchSize = 1000
+        for (let i = 0; i < allRecords.length; i += batchSize) {
+          const batch = allRecords.slice(i, i + batchSize)
+          const ids = batch.map(record => record.id)
+          
+          const { error: deleteError } = await supabase
+            .from('previsoes_demanda')
+            .delete()
+            .in('id', ids)
+          
+          if (deleteError) {
+            console.error(`❌ Erro ao deletar lote ${i / batchSize + 1}:`, deleteError)
+            return { success: false, error: `Erro ao deletar dados: ${deleteError.message}` }
+          }
+          
+          console.log(`✅ Lote ${i / batchSize + 1} deletado (${ids.length} registros)`)
+        }
+        
+        // Verificar se ainda há registros
+        const { data: remainingRecords } = await supabase
+          .from('previsoes_demanda')
+          .select('id')
+          .limit(1)
+        
+        if (!remainingRecords || remainingRecords.length === 0) {
+          allDeleted = true
+        }
+      }
+      
+      if (!allDeleted) {
+        return { success: false, error: 'Não foi possível limpar completamente a tabela após múltiplas tentativas' }
+      }
+      
+      console.log('✅ Tabela previsoes_demanda limpa com sucesso')
+      
+      // 2. Processar arquivo CSV de médias
+      const csvMediaText = await csvMediaFile.text()
+      const mediasData = parseMediasCSV(csvMediaText)
+      
+      if (mediasData.length === 0) {
+        return { success: false, error: "Nenhum dado válido encontrado no arquivo de médias" }
+      }
+      
+      console.log(`📊 Processados ${mediasData.length} registros do arquivo de médias`)
+      
+      // 3. Inserir dados na tabela previsoes_demanda
+      console.log('💾 Inserindo dados na tabela previsoes_demanda...')
+      console.log('📊 Dados a serem inseridos (primeiros 3 registros):', mediasData.slice(0, 3))
+      
+      try {
+        const { data: insertData, error: insertError } = await supabase
+          .from('previsoes_demanda')
+          .insert(mediasData)
+          .select()
+        
+        if (insertError) {
+          console.error('❌ Erro detalhado ao inserir dados na tabela:', {
+            message: insertError.message,
+            details: insertError.details,
+            hint: insertError.hint,
+            code: insertError.code
+          })
+          return { success: false, error: `Erro ao inserir dados: ${insertError.message}. Detalhes: ${insertError.details || 'N/A'}` }
+        }
+        
+        console.log('✅ Dados do arquivo de médias inseridos com sucesso na tabela previsoes_demanda')
+        console.log(`📊 ${insertData?.length || mediasData.length} registros inseridos`)
+      } catch (networkError) {
+        console.error('❌ Erro de rede ao inserir dados:', networkError)
+        return { success: false, error: `Erro de conectividade: ${networkError.message}. Verifique sua conexão com a internet e as configurações do Supabase.` }
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao processar arquivo de médias:', error)
+      return { success: false, error: `Erro ao processar arquivo de médias: ${error instanceof Error ? error.message : 'Erro desconhecido'}` }
+    }
+
     const dataInicioStr = formData.get("dataInicio") as string
     const dataFimStr = formData.get("dataFim") as string
     
@@ -471,6 +602,67 @@ export async function calculateDemandForecast(
       error: error instanceof Error ? error.message : "Erro interno do servidor",
     }
   }
+}
+
+// Função para fazer parse do CSV de médias dos itens
+function parseMediasCSV(csvText: string) {
+  console.log('🔍 Iniciando parseMediasCSV para arquivo de médias');
+  console.log('📄 Conteúdo do CSV de médias (primeiros 500 caracteres):', csvText.substring(0, 500));
+  
+  const lines = csvText.trim().split("\n")
+  console.log('📄 Total de linhas no arquivo de médias:', lines.length);
+  
+  const mediasArray = []
+  
+  // Pular cabeçalho se existir
+  const startIndex = lines[0].toLowerCase().includes("sku") || lines[0].toLowerCase().includes("fml_item") ? 1 : 0
+  console.log('📄 Processando', lines.length - startIndex, 'linhas de dados de médias');
+  
+  for (let i = startIndex; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+    
+    // Dividir por ponto e vírgula
+    const parts = line.split(';').map(part => part.trim())
+    
+    if (parts.length >= 4) {
+      const [sku, fml_item, media_prevista, dt_implant] = parts
+      
+      // Validar dados
+      const mediaPrevistaNumerica = parseFloat(media_prevista.replace(',', '.'))
+      
+      // Validações mais rigorosas
+      const skuValido = sku && sku.length > 0 && sku.length <= 50
+      const fmlItemValido = fml_item && fml_item.length > 0 && fml_item.length <= 100
+      const mediaValida = !isNaN(mediaPrevistaNumerica) && mediaPrevistaNumerica >= 0
+      const dtImplantValida = dt_implant && dt_implant.length > 0 && dt_implant.length <= 20
+      
+      if (skuValido && fmlItemValido && mediaValida && dtImplantValida) {
+        const registro = {
+          sku: sku.substring(0, 50), // Limitar tamanho
+          fml_item: fml_item.substring(0, 100), // Limitar tamanho
+          media_prevista: Math.round(mediaPrevistaNumerica * 100) / 100, // Arredondar para 2 casas
+          dt_implant: dt_implant.substring(0, 20), // Limitar tamanho
+          data_calculo: new Date().toISOString().split('T')[0] // Data atual no formato YYYY-MM-DD
+        }
+        
+        console.log(`✅ Registro válido linha ${i + 1}:`, registro)
+        mediasArray.push(registro)
+      } else {
+        console.warn(`⚠️ Linha ${i + 1} inválida no arquivo de médias:`)
+        console.warn(`   - SKU válido: ${skuValido} (${sku})`)
+        console.warn(`   - FML Item válido: ${fmlItemValido} (${fml_item})`)
+        console.warn(`   - Média válida: ${mediaValida} (${media_prevista} -> ${mediaPrevistaNumerica})`)
+        console.warn(`   - DT Implant válida: ${dtImplantValida} (${dt_implant})`)
+        console.warn(`   - Linha completa: ${line}`)
+      }
+    } else {
+      console.warn(`⚠️ Linha ${i + 1} com formato incorreto no arquivo de médias:`, line)
+    }
+  }
+  
+  console.log(`✅ parseMediasCSV concluído: ${mediasArray.length} registros válidos processados`);
+  return mediasArray
 }
 
 // Função para fazer parse do CSV
