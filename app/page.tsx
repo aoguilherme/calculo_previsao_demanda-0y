@@ -60,7 +60,7 @@ export default function DemandForecastPage() {
   // Estados para controlar os valores dos campos
   const [fieldValues, setFieldValues] = useState(defaultValues)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [selectedMediaFile, setSelectedMediaFile] = useState<File | null>(null)
+
   const [csvData, setCsvData] = useState<Array<{data: Date, sku: string, familia: string, vendas: number}>>([]) // Dados do CSV processados
 
   const [showResultPopup, setShowResultPopup] = useState(false)
@@ -308,26 +308,6 @@ export default function DemandForecastPage() {
     const fileInput = document.getElementById("csvFile") as HTMLInputElement
     if (fileInput) fileInput.value = ""
   }
-
-  const handleMediaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file && file.type === "text/csv") {
-      setSelectedMediaFile(file)
-    } else {
-      alert("Por favor, selecione um arquivo CSV válido.")
-      event.target.value = ""
-    }
-  }
-
-  const removeMediaFile = () => {
-    setSelectedMediaFile(null)
-    // Reset file input value
-    const fileInput = document.getElementById("csvMediaFile") as HTMLInputElement
-    if (fileInput) fileInput.value = ""
-  }
-
-
-
   return (
     <div className="h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex flex-col overflow-hidden">
       {/* Compact Header */}
@@ -403,53 +383,17 @@ export default function DemandForecastPage() {
               </div>
             )}
             <form action={action} className="h-full flex flex-col">
+              {/* Campos hidden para enviar valores controlados */}
+              <input type="hidden" name="dataInicio" value={fieldValues.dataInicio} />
+              <input type="hidden" name="dataFim" value={fieldValues.dataFim} />
+              <input type="hidden" name="diasPrevisao" value={fieldValues.diasPrevisao} />
+              <input type="hidden" name="datasAtipicas" value={JSON.stringify(datasAtipicas)} />
+              
               {/* Compact Grid Layout */}
               <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden">
                 
                 {/* Left Column - Upload & Dates */}
                 <div className="space-y-4">
-                  {/* Upload Section - Média dos Itens */}
-                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-6 h-6 bg-green-500 rounded-lg flex items-center justify-center">
-                        <FileText className="w-4 h-4 text-white" />
-                      </div>
-                      <Label htmlFor="csvMediaFile" className="text-sm font-semibold text-slate-800">
-                        Arquivo de Médias (CSV) <span className="text-red-500">*</span>
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Input
-                        id="csvMediaFile"
-                        name="csvMediaFile"
-                        type="file"
-                        accept=".csv"
-                        className="flex-1 h-9 text-xs border-2 border-dashed border-green-300 bg-white/50 hover:border-green-400 transition-colors file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700"
-                        onChange={handleMediaFileChange}
-                      />
-                      {selectedMediaFile && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={removeMediaFile}
-                          className="h-9 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                          title="Remover arquivo"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                    {selectedMediaFile && (
-                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
-                        <p className="text-xs text-green-700 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" />
-                          {selectedMediaFile.name}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
                   {/* Upload Section - Histórico de Vendas */}
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
                     <div className="flex items-center gap-2 mb-3">
@@ -827,21 +771,7 @@ export default function DemandForecastPage() {
                     </div>
                   </div>
 
-                  {/* Info Panel - Formato do Arquivo de Médias */}
-                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-5 h-5 bg-green-500 rounded-lg flex items-center justify-center">
-                        <AlertTriangle className="w-3 h-3 text-white" />
-                      </div>
-                      <h4 className="text-xs font-semibold text-slate-800">Formato do Arquivo de Médias</h4>
-                    </div>
-                    <div className="text-xs text-slate-600 space-y-1">
-                      <p>• Formato: CSV</p>
-                      <p>• Separador: ponto e vírgula (;)</p>
-                      <p>• Colunas: sku; fml_item; media_prevista; dt_implant</p>
-                      <p>• Data: aaaa/mm/dd</p>
-                    </div>
-                  </div>
+
 
                   <div className="bg-gradient-to-br from-red-50 to-rose-50 rounded-xl p-4 border border-red-100">
                     <div className="flex items-center gap-2 mb-2">
