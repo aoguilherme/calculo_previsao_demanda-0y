@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect, useActionState } from "react"
+import { useState, useEffect, useActionState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"

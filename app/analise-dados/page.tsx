@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback, memo } from 'react'
+import { useState, useEffect, useMemo, useCallback, memo } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -56,6 +56,8 @@ export default function AnaliseDadosPage() {
   const [totalSkus, setTotalSkus] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
   const [saveProgress, setSaveProgress] = useState('')
+  const [showResultPopup, setShowResultPopup] = useState(false)
+  const [resultPopupState, setResultPopupState] = useState<{success: boolean, message: string} | null>(null)
   
   // Estados para virtualização da tabela
   const [scrollTop, setScrollTop] = useState(0)
@@ -310,74 +312,48 @@ export default function AnaliseDadosPage() {
 
   // Função para salvar dados no Supabase e exportar Excel
   const handleSaveAndExport = async () => {
-    if (isSaving) return
-    
+
     setIsSaving(true)
-    setSaveProgress('Preparando dados...')
-    
+    setSaveProgress('Atualizando médias no Supabase...')
+    setShowResultPopup(false)
+    setResultPopupState(null)
     try {
-      // 1º Passo: Salvar no Supabase
-      setSaveProgress('Salvando no Supabase...')
-      
-      // Preparar dados para o Supabase
-      const dadosParaSalvar = dadosProcessados.map(item => ({
-        sku: item.sku,
-        media: item.calculo_realizado || item.media_prevista,
-        previsao_total: item.media_prevista,
-        categoria: 'alto_volume',
-        ajuste_validacao: 100,
-        familia: item.fml_item || ''
-      }))
-      
-      // Salvar no Supabase
-      const { saveToSupabase } = await import('../saveToSupabase')
-      const saveResult = await saveToSupabase(dadosParaSalvar, new Date())
-      
-      if (!saveResult.success) {
-        console.warn('Erro ao salvar no Supabase:', saveResult.error)
+      // Atualizar médias no Supabase
+      for (const item of dadosProcessados) {
+        if (item.sku && typeof item.calculo_realizado === 'number') {
+          await supabase
+            .from('previsoes_demanda')
+            .update({ media_prevista: item.calculo_realizado })
+            .eq('sku', item.sku)
+        }
       }
-      
-      // 2º Passo: Gerar e baixar arquivo Excel
-      setSaveProgress('Gerando arquivo Excel...')
-      
-      // Preparar dados para o Excel (sem a coluna Previsão Total)
-      const excelData = dadosProcessados.map(item => ({
-        'SKU': item.sku,
-        'Família': item.fml_item || '',
-        'Media': item.calculo_realizado || item.media_prevista,
-        'Categoria': 'alto_volume',
-        'Ajuste Validacao (%)': 100
+      setSaveProgress('Gerando planilha...')
+      // Gerar planilha Excel
+      const wb = XLSX.utils.book_new()
+      const wsData = dadosProcessados.map(item => ({
+        'Código Item': item.sku,
+        'Família': item.fml_item,
+        'Média Atual': item.media_prevista,
+        'Data Implant.': item.dt_implant ? item.dt_implant.split('T')[0].split('-').reverse().join('/') : '-',
+        'Cálculo Realizado': item.calculo_realizado,
+        'Diferença (%)': item.diferencaCalculada ? Number(item.diferencaCalculada.toFixed(2)) : 0
       }))
-      
-      // Criar planilha Excel usando SheetJS
-      const worksheet = XLSX.utils.json_to_sheet(excelData)
-      const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Análise de Dados')
-      
-      // Gerar arquivo Excel
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
-      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      
-      // Baixar arquivo
-      const link = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      link.setAttribute('href', url)
-      link.setAttribute('download', `analise_dados_${new Date().toISOString().split('T')[0]}.xlsx`)
-      link.style.visibility = 'hidden'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      
-      setSaveProgress('✅ Dados salvos e arquivo Excel gerado com sucesso!')
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-    } catch (error) {
-      console.error('Erro durante o processo:', error)
+      const ws = XLSX.utils.json_to_sheet(wsData)
+      XLSX.utils.book_append_sheet(wb, ws, 'media_final')
+      const now = new Date()
+      const pad = (n: number) => n.toString().padStart(2, '0')
+      const fileName = `media_final_${pad(now.getDate())}-${pad(now.getMonth()+1)}-${now.getFullYear()}.xlsx`
+      XLSX.writeFile(wb, fileName)
+      setSaveProgress('✅ Médias atualizadas e planilha gerada!')
+      setResultPopupState({success: true, message: 'Todos os dados foram carregados e a planilha foi gerada com sucesso.'})
+      setShowResultPopup(true)
+    } catch (e) {
       setSaveProgress('❌ Erro durante o processo')
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      setResultPopupState({success: false, message: 'Ocorreu um erro durante o processo de exportação.'})
+      setShowResultPopup(true)
     } finally {
       setIsSaving(false)
-      setSaveProgress('')
+      setTimeout(() => setSaveProgress(''), 2000)
     }
   }
 
@@ -969,6 +945,43 @@ export default function AnaliseDadosPage() {
           </CardContent>
         </Card>
       </main>
+
+      {/* Popup de resultado */}
+      {showResultPopup && resultPopupState && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
+          <div className="bg-white rounded-2xl shadow-2xl w-[400px] max-h-[85vh] overflow-hidden animate-in slide-in-from-bottom-4 duration-300 flex flex-col">
+            <div className={`px-4 py-3 flex-shrink-0 ${resultPopupState.success ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-red-500 to-rose-500'}`}> 
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                    {resultPopupState.success ? (
+                      <BarChart3 className="w-5 h-5 text-white" />
+                    ) : (
+                      <X className="w-5 h-5 text-white" />
+                    )}
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white">
+                      {resultPopupState.success ? 'Exportação Concluída!' : 'Erro na Exportação'}
+                    </h2>
+                    <p className="text-white/80 text-xs">
+                      {resultPopupState.message}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowResultPopup(false)}
+                  className="text-white/80 hover:text-white hover:bg-white/20 rounded-lg h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -210,7 +210,10 @@ export async function calculateDemandForecast(
         console.log(`📊 ${insertData?.length || mediasData.length} registros inseridos`)
       } catch (networkError) {
         console.error('❌ Erro de rede ao inserir dados:', networkError)
-        return { success: false, error: `Erro de conectividade: ${networkError.message}. Verifique sua conexão com a internet e as configurações do Supabase.` }
+        return { 
+          success: false, 
+          error: `Erro de conectividade: ${networkError instanceof Error ? networkError.message : 'Erro desconhecido'}. Verifique sua conexão com a internet e as configurações do Supabase.` 
+        }
       }
       
     } catch (error) {
