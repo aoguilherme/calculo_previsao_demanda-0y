@@ -1,4 +1,5 @@
 -- Script para configurar Row Level Security (RLS) na tabela previsoes_demanda
+
 -- Execute este script no SQL Editor do Supabase Dashboard
 
 -- 1. Habilitar Row Level Security na tabela previsoes_demanda

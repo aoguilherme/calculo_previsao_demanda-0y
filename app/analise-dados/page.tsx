@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { ArrowUpDown, Filter, Search, X, Edit2, Save, BarChart3, Download, Upload, ArrowLeft, ChevronUp, ChevronDown, Check, Plus } from 'lucide-react'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/client'
 import * as XLSX from 'xlsx'
 
 // Função debounce customizada para evitar dependências externas
@@ -27,11 +27,6 @@ function debounce<T extends (...args: any[]) => any>(
     timeout = setTimeout(() => func(...args), wait)
   }
 }
-
-// Configuração do Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabase = createClient(supabaseUrl, supabaseKey)
 
 interface PrevisaoDemanda {
   sku: string
@@ -106,6 +101,7 @@ export default function AnaliseDadosPage() {
       console.log('🔄 Carregando todos os dados...')
       
       // Primeiro, obter o total de registros
+      const supabase = createClient()
       const { count } = await supabase
         .from('previsoes_demanda')
         .select('*', { count: 'exact', head: true })
@@ -277,6 +273,7 @@ export default function AnaliseDadosPage() {
     setResultPopupState(null)
     try {
       // 1. Atualizar a coluna media_prevista com os valores de calculo_realizado no Supabase
+      const supabase = createClient()
       for (const item of dadosProcessados) {
         if (item.sku && typeof item.calculo_realizado === 'number') {
           await supabase
