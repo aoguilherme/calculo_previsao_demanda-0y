@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { X, FileText, BarChart3, Upload, CheckCircle, Calendar, Plus, Edit2, Trash2, Calculator, ArrowRight, AlertTriangle, AlertCircle } from "lucide-react"
+import { X, FileText, BarChart3, Upload, CheckCircle, Calendar, Plus, Edit2, Trash2, Calculator, ArrowRight, AlertTriangle, AlertCircle, Download } from "lucide-react"
 import { calculateDemandForecast } from "./actions"
 import { clearPrevisoesDemanda } from "./clearTableAction"
+import * as XLSX from 'xlsx'
 
 export default function DemandForecastPage() {
   // Mova todos os estados para dentro do componente
@@ -110,6 +111,80 @@ export default function DemandForecastPage() {
       setTimeout(() => setClearTableMessage(''), 5000)
     } finally {
       setIsClearingTable(false)
+    }
+  }
+
+  // Função para exportar planilha de resultados dos cálculos Prophet+ARIMA
+  const handleExportResults = async () => {
+    try {
+      // Verificar se existem resultados de cálculo salvos
+      const dadosCalculo = sessionStorage.getItem('dadosCalculo')
+      if (!dadosCalculo) {
+        alert('Nenhum resultado de cálculo encontrado. Execute o cálculo primeiro.')
+        return
+      }
+
+      const { resultados } = JSON.parse(dadosCalculo)
+      if (!resultados || !Array.isArray(resultados) || resultados.length === 0) {
+        alert('Nenhum resultado válido encontrado para exportar.')
+        return
+      }
+
+      // Preparar dados para o Excel
+      const excelData = resultados.map((item: any) => ({
+        'SKU': item.sku || '',
+        'Previsão': item.media || 0,
+        'Média': item.media || 0,
+        'Categoria': item.categoria || '',
+        'Ajuste Validação (%)': 100
+      }))
+
+      // Criar planilha Excel usando SheetJS
+      const worksheet = XLSX.utils.json_to_sheet(excelData)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Resultados Prophet+ARIMA')
+
+      // Gerar arquivo Excel
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+
+      // Baixar arquivo
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `resultados_prophet_arima_${new Date().toISOString().split('T')[0]}.xlsx`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      // Processar resultados para criar mapeamento SKU -> valor calculado (coluna "Media")
+      const calculationResults: Record<string, number> = {}
+      
+      if (Array.isArray(resultados)) {
+        resultados.forEach((item: any) => {
+          if (item.sku && typeof item.media === 'number') {
+            calculationResults[item.sku] = item.media
+          }
+        })
+      }
+      
+      // Salvar mapeamento de resultados de cálculo para a página de análise
+      sessionStorage.setItem('calculationResults', JSON.stringify(calculationResults))
+      console.log('💾 Resultados de cálculo salvos para análise:', Object.keys(calculationResults).length, 'SKUs')
+
+      // Fechar o popup de resultados
+      setShowResultPopup(false)
+
+      // Navegar para a página de análise de dados
+      router.push('/analise-dados')
+
+      // Mostrar mensagem de sucesso
+      console.log('✅ Planilha exportada e dados transferidos para análise com sucesso!')
+    } catch (error) {
+      console.error('Erro ao exportar planilha:', error)
+      alert('Erro ao exportar planilha. Tente novamente.')
     }
   }
 
@@ -931,9 +1006,10 @@ export default function DemandForecastPage() {
                       </div>
                       <h3 className="text-sm font-semibold text-slate-800 mb-2">Exportação e Salvamento</h3>
                       <p className="text-sm text-slate-600 mb-3">Ir para análise de dados para revisar e salvar</p>
+                      {/* Botão para exportar planilha de resultados */}
                       <Button
                         onClick={() => {
-                          // Salvar os dados do cálculo no sessionStorage
+                          // Salvar os dados do cálculo no sessionStorage primeiro
                           if (state.resultados && state.dataCalculo) {
                             const dadosCalculo = {
                               resultados: state.resultados,
@@ -942,15 +1018,30 @@ export default function DemandForecastPage() {
                               filename: state.filename
                             }
                             sessionStorage.setItem('dadosCalculo', JSON.stringify(dadosCalculo))
+                            
+                            // Processar resultados para criar mapeamento SKU -> valor calculado
+                            const calculationResults: Record<string, number> = {}
+                            
+                            if (Array.isArray(state.resultados)) {
+                              state.resultados.forEach((item: any) => {
+                                if (item.sku && typeof item.media === 'number') {
+                                  calculationResults[item.sku] = item.media
+                                }
+                              })
+                            }
+                            
+                            // Salvar mapeamento de resultados de cálculo
+                            sessionStorage.setItem('calculationResults', JSON.stringify(calculationResults))
+                            console.log('💾 Resultados de cálculo salvos:', Object.keys(calculationResults).length, 'SKUs')
                           }
                           
-                          // Navegar para a página de análise de dados
-                          router.push('/analise-dados')
+                          // Exportar planilha de resultados
+                          handleExportResults()
                         }}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-medium text-sm rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all duration-300 shadow-md hover:shadow-lg"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium text-sm rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg"
                       >
-                        <ArrowRight className="w-4 h-4" />
-                        Exportar
+                        <Download className="w-4 h-4" />
+                        Baixar Planilha de Resultados
                       </Button>
                     </div>
                   )}
