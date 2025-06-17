@@ -408,6 +408,48 @@ export default function DemandForecastPage() {
                 
                 {/* Left Column - Upload & Dates */}
                 <div className="space-y-4">
+                  {/* Upload Section - Média dos Itens */}
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 bg-green-500 rounded-lg flex items-center justify-center">
+                        <FileText className="w-4 h-4 text-white" />
+                      </div>
+                      <Label htmlFor="csvMediaFile" className="text-sm font-semibold text-slate-800">
+                        Arquivo de Médias (CSV) <span className="text-red-500">*</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        id="csvMediaFile"
+                        name="csvMediaFile"
+                        type="file"
+                        accept=".csv"
+                        className="flex-1 h-9 text-xs border-2 border-dashed border-green-300 bg-white/50 hover:border-green-400 transition-colors file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700"
+                        onChange={handleMediaFileChange}
+                      />
+                      {selectedMediaFile && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={removeMediaFile}
+                          className="h-9 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          title="Remover arquivo"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                    {selectedMediaFile && (
+                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-xs text-green-700 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          {selectedMediaFile.name}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Upload Section - Histórico de Vendas */}
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
                     <div className="flex items-center gap-2 mb-3">
@@ -415,7 +457,7 @@ export default function DemandForecastPage() {
                         <FileText className="w-4 h-4 text-white" />
                       </div>
                       <Label htmlFor="csvFile" className="text-sm font-semibold text-slate-800">
-                        Anexar histórico de vendas <span className="text-red-500">*</span>
+                        Arquivo de Vendas (CSV) <span className="text-red-500">*</span>
                       </Label>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -446,48 +488,6 @@ export default function DemandForecastPage() {
                         <p className="text-xs text-green-700 flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
                           {selectedFile.name}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Upload Section - Média dos Itens */}
-                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-6 h-6 bg-green-500 rounded-lg flex items-center justify-center">
-                        <FileText className="w-4 h-4 text-white" />
-                      </div>
-                      <Label htmlFor="csvMediaFile" className="text-sm font-semibold text-slate-800">
-                        Anexar média dos itens
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Input
-                        id="csvMediaFile"
-                        name="csvMediaFile"
-                        type="file"
-                        accept=".csv"
-                        className="flex-1 h-9 text-xs border-2 border-dashed border-green-300 bg-white/50 hover:border-green-400 transition-colors file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700"
-                        onChange={handleMediaFileChange}
-                      />
-                      {selectedMediaFile && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={removeMediaFile}
-                          className="h-9 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                          title="Remover arquivo"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                    {selectedMediaFile && (
-                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
-                        <p className="text-xs text-green-700 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" />
-                          {selectedMediaFile.name}
                         </p>
                       </div>
                     )}

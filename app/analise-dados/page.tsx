@@ -48,9 +48,6 @@ type SortDirection = 'asc' | 'desc'
 export default function AnaliseDadosPage() {
   const [dados, setDados] = useState<PrevisaoDemanda[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMoreData, setHasMoreData] = useState(false)
-  const [currentOffset, setCurrentOffset] = useState(0)
   const [editingRow, setEditingRow] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>('')
   const [totalSkus, setTotalSkus] = useState(0)
@@ -102,11 +99,11 @@ export default function AnaliseDadosPage() {
     setFamiliaSelectFilter([])
   }, [])
 
-  // Função para carregar dados iniciais
+  // Função para carregar dados iniciais - TODOS os registros
   const carregarDados = async () => {
     try {
       setLoading(true)
-      console.log('🔄 Carregando dados iniciais...')
+      console.log('🔄 Carregando todos os dados...')
       
       // Primeiro, obter o total de registros
       const { count } = await supabase
@@ -116,61 +113,87 @@ export default function AnaliseDadosPage() {
       setTotalSkus(count || 0)
       console.log(`📊 Total de registros: ${count}`)
       
-      // Carregar apenas os primeiros 5000 registros para melhor performance
-      const INITIAL_BATCH_SIZE = 5000
-      const { data, error } = await supabase
-        .from('previsoes_demanda')
-        .select('sku, media_prevista, fml_item, dt_implant')
-        .order('sku')
-        .range(0, INITIAL_BATCH_SIZE - 1)
-
-      if (error) {
-        console.error('Erro ao carregar dados:', error)
-        toast({
-          title: "Erro ao carregar dados",
-          description: error.message,
-          variant: "destructive"
-        })
-        return
-      }
-
-      if (data) {
-        // Tentar carregar resultados de cálculos do sessionStorage
-        const savedResults = sessionStorage.getItem('calculationResults')
-        let calculationResults: Record<string, number> = {}
-        
-        if (savedResults) {
-          try {
-            calculationResults = JSON.parse(savedResults)
-            console.log('📋 Resultados de cálculos carregados do sessionStorage')
-          } catch (e) {
-            console.warn('Erro ao parsear resultados salvos:', e)
-          }
+      // Carregar TODOS os dados em lotes para garantir que nada seja omitido
+      const BATCH_SIZE = 1000 // Tamanho do lote para carregamento
+      let allData: any[] = []
+      let currentBatch = 0
+      let hasMore = true
+      
+      // Tentar carregar resultados de cálculos do sessionStorage
+      const savedResults = sessionStorage.getItem('calculationResults')
+      let calculationResults: Record<string, number> = {}
+      
+      if (savedResults) {
+        try {
+          calculationResults = JSON.parse(savedResults)
+          console.log('📋 Resultados de cálculos carregados do sessionStorage')
+        } catch (e) {
+          console.warn('Erro ao parsear resultados salvos:', e)
         }
+      }
+      
+      // Carregar todos os dados em lotes
+      while (hasMore) {
+        const startRange = currentBatch * BATCH_SIZE
+        const endRange = startRange + BATCH_SIZE - 1
+        
+        console.log(`🔄 Carregando lote ${currentBatch + 1} (registros ${startRange + 1}-${endRange + 1})...`)
+        
+        const { data, error } = await supabase
+          .from('previsoes_demanda')
+          .select('sku, media_prevista, fml_item, dt_implant')
+          .order('sku')
+          .range(startRange, endRange)
 
-        // Mesclar dados do Supabase com resultados de cálculos
-        const dadosComCalculos = data.map(item => ({
-          ...item,
-          calculo_realizado: calculationResults[item.sku] || undefined,
-          fml_item: item.fml_item || ''
-        }))
-        
-        setDados(dadosComCalculos)
-        setCurrentOffset(INITIAL_BATCH_SIZE)
-        
-        // Verificar se há mais dados
-        if (count && count > INITIAL_BATCH_SIZE) {
-          setHasMoreData(true)
+        if (error) {
+          console.error('Erro ao carregar dados:', error)
           toast({
-            title: "Dados carregados",
-            description: `Primeiros ${INITIAL_BATCH_SIZE.toLocaleString('pt-BR')} registros carregados. ${(count - INITIAL_BATCH_SIZE).toLocaleString('pt-BR')} registros adicionais disponíveis.`,
+            title: "Erro ao carregar dados",
+            description: error.message,
+            variant: "destructive"
           })
-        } else {
-          setHasMoreData(false)
+          return
         }
-        
-        console.log(`✅ ${data.length} registros carregados com sucesso`)
+
+        if (data && data.length > 0) {
+          // Mesclar dados do Supabase com resultados de cálculos
+          const dadosComCalculos = data.map(item => ({
+            ...item,
+            calculo_realizado: calculationResults[item.sku] || undefined,
+            fml_item: item.fml_item || ''
+          }))
+          
+          allData = [...allData, ...dadosComCalculos]
+          
+          // Se retornou menos dados que o tamanho do lote, chegamos ao fim
+          if (data.length < BATCH_SIZE) {
+            hasMore = false
+          }
+          
+          currentBatch++
+          
+          // Atualizar progresso para o usuário
+          if (currentBatch % 5 === 0 || !hasMore) { // Atualizar a cada 5 lotes ou no final
+            toast({
+              title: "Carregando dados...",
+              description: `${allData.length.toLocaleString('pt-BR')} de ${count?.toLocaleString('pt-BR')} registros carregados`,
+            })
+          }
+        } else {
+          hasMore = false
+        }
       }
+      
+      // Definir todos os dados carregados
+       setDados(allData)
+      
+      console.log(`✅ TODOS os ${allData.length} registros carregados com sucesso`)
+      
+      toast({
+        title: "Dados carregados com sucesso!",
+        description: `Todos os ${allData.length.toLocaleString('pt-BR')} registros foram carregados e estão disponíveis para visualização.`,
+      })
+      
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
       toast({
@@ -183,73 +206,7 @@ export default function AnaliseDadosPage() {
     }
   }
 
-  // Função para carregar mais dados
-  const carregarMaisDados = async () => {
-    if (loadingMore || !hasMoreData) return
-    
-    try {
-      setLoadingMore(true)
-      const BATCH_SIZE = 2000
-      const newOffset = currentOffset
-      
-      console.log(`🔄 Carregando mais dados (offset: ${newOffset})...`)
-      
-      const { data, error } = await supabase
-        .from('previsoes_demanda')
-        .select('sku, media_prevista, fml_item, dt_implant')
-        .order('sku')
-        .range(newOffset, newOffset + BATCH_SIZE - 1)
 
-      if (error) {
-        console.error('Erro ao carregar mais dados:', error)
-        toast({
-          title: "Erro ao carregar mais dados",
-          description: error.message,
-          variant: "destructive"
-        })
-        return
-      }
-
-      if (data && data.length > 0) {
-        // Adicionar novos dados aos existentes
-        const novosDados = data.map(item => ({
-          ...item,
-          calculo_realizado: undefined,
-          fml_item: item.fml_item || ''
-        }))
-        
-        setDados(prev => [...prev, ...novosDados])
-        setCurrentOffset(newOffset + BATCH_SIZE)
-        
-        // Verificar se há mais dados
-        if (data.length < BATCH_SIZE) {
-          setHasMoreData(false)
-        }
-        
-        console.log(`✅ Carregados mais ${data.length} registros`)
-        
-        toast({
-          title: "Mais dados carregados",
-          description: `${data.length} registros adicionais carregados.`,
-        })
-      } else {
-        setHasMoreData(false)
-        toast({
-          title: "Todos os dados carregados",
-          description: "Não há mais dados para carregar.",
-        })
-      }
-    } catch (error) {
-      console.error('Erro ao carregar mais dados:', error)
-      toast({
-        title: "Erro de conexão",
-        description: "Não foi possível carregar mais dados. Tente novamente.",
-        variant: "destructive"
-      })
-    } finally {
-      setLoadingMore(false)
-    }
-  }
 
   // Carregar dados na inicialização
   useEffect(() => {
@@ -259,7 +216,9 @@ export default function AnaliseDadosPage() {
   // Função para iniciar edição
   const iniciarEdicao = (sku: string, valorAtual?: number) => {
     setEditingRow(sku)
-    setEditValue(valorAtual?.toString() || '')
+    // Se não há valor calculado, usar a média atual como fallback
+    const valorParaEdicao = valorAtual || dados.find(item => item.sku === sku)?.media_prevista || 0
+    setEditValue(Math.round(valorParaEdicao).toString())
   }
 
   // Cancelar edição
@@ -270,7 +229,7 @@ export default function AnaliseDadosPage() {
 
   // Salvar edição
   const salvarEdicao = (sku: string) => {
-    const novoValor = parseFloat(editValue)
+    const novoValor = Math.round(parseFloat(editValue))
     if (isNaN(novoValor)) {
       toast({
         title: "Valor inválido",
@@ -310,15 +269,14 @@ export default function AnaliseDadosPage() {
     })
   }
 
-  // Função para salvar dados no Supabase e exportar Excel
+  // Função para atualizar médias no Supabase e exportar Excel
   const handleSaveAndExport = async () => {
-
     setIsSaving(true)
     setSaveProgress('Atualizando médias no Supabase...')
     setShowResultPopup(false)
     setResultPopupState(null)
     try {
-      // Atualizar médias no Supabase
+      // 1. Atualizar a coluna media_prevista com os valores de calculo_realizado no Supabase
       for (const item of dadosProcessados) {
         if (item.sku && typeof item.calculo_realizado === 'number') {
           await supabase
@@ -327,8 +285,9 @@ export default function AnaliseDadosPage() {
             .eq('sku', item.sku)
         }
       }
+      
+      // 2. Gerar planilha Excel com as informações da tabela
       setSaveProgress('Gerando planilha...')
-      // Gerar planilha Excel
       const wb = XLSX.utils.book_new()
       const wsData = dadosProcessados.map(item => ({
         'Código Item': item.sku,
@@ -344,8 +303,9 @@ export default function AnaliseDadosPage() {
       const pad = (n: number) => n.toString().padStart(2, '0')
       const fileName = `media_final_${pad(now.getDate())}-${pad(now.getMonth()+1)}-${now.getFullYear()}.xlsx`
       XLSX.writeFile(wb, fileName)
+      
       setSaveProgress('✅ Médias atualizadas e planilha gerada!')
-      setResultPopupState({success: true, message: 'Todos os dados foram carregados e a planilha foi gerada com sucesso.'})
+      setResultPopupState({success: true, message: 'Os valores de Cálculo Realizado foram salvos como novas médias no Supabase e a planilha foi gerada com sucesso.'})
       setShowResultPopup(true)
     } catch (e) {
       setSaveProgress('❌ Erro durante o processo')
@@ -554,14 +514,14 @@ export default function AnaliseDadosPage() {
                 <div className="flex items-center gap-6 flex-wrap">
                   {/* Filtro por SKU */}
                   <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-white/80 whitespace-nowrap">Código do Item:</label>
+                    <label className="text-xs font-medium text-white/80 whitespace-nowrap">Código SKU</label>
                     <div className="relative w-64">
                       <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-white/60 w-3 h-3" />
                       <Input
                         placeholder="Digite o código..."
                         value={skuFilter}
                         onChange={(e) => handleSkuFilterChange(e.target.value)}
-                        className="pl-7 pr-7 bg-white/10 border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40 h-12 text-sm transition-all duration-200 w-full"
+                        className="pl-7 pr-7 bg-white/10 border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/40 h-10 text-lg transition-all duration-200 w-full"
                         autoComplete="off"
                         spellCheck={false}
                       />
@@ -579,13 +539,13 @@ export default function AnaliseDadosPage() {
 
                   {/* Filtro por Família (Checkboxes) */}
                   <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-white/80 whitespace-nowrap">Família do Produto:</label>
+                    <label className="text-xs font-medium text-white/80 whitespace-nowrap">Família SKU</label>
                     <div className="w-64">
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
-                            className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/40 h-12 text-sm transition-all duration-200 w-full justify-between"
+                            className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/40 h-10 text-sm transition-all duration-200 w-full justify-between"
                           >
                             <span className="truncate">
                               {familiaSelectFilter.length === 0 
@@ -656,7 +616,7 @@ export default function AnaliseDadosPage() {
           </CardHeader>
           
           <CardContent className="p-6">
-            <div className="rounded-lg border border-slate-200 h-[667px] flex flex-col">
+            <div className="rounded-lg border border-slate-200 h-[640px] flex flex-col">
               <div className="sticky top-0 bg-slate-800 z-50 border-b-2 border-slate-600">
                 <Table>
                   <TableHeader>
@@ -829,7 +789,7 @@ export default function AnaliseDadosPage() {
                                 <div className="flex items-center justify-center gap-2">
                                   <Input
                                     type="number"
-                                    step="0.01"
+                                    step="1"
                                     value={editValue}
                                     onChange={(e) => setEditValue(e.target.value)}
                                     className="w-20 h-6 text-sm text-center"
@@ -838,7 +798,7 @@ export default function AnaliseDadosPage() {
                                 </div>
                               ) : (
                                 <span className={item.calculo_realizado ? '' : 'text-slate-400'}>
-                                  {item.calculo_realizado ? item.calculo_realizado.toLocaleString('pt-BR', { maximumFractionDigits: 0, useGrouping: true }).replace(/,/g, '.') : '0'}
+                                  {item.calculo_realizado ? Math.round(item.calculo_realizado).toLocaleString('pt-BR', { useGrouping: true }).replace(/,/g, '.') : item.media_prevista ? Math.round(item.media_prevista).toLocaleString('pt-BR', { useGrouping: true }).replace(/,/g, '.') : '0'}
                                 </span>
                               )}
                             </TableCell>
@@ -898,39 +858,13 @@ export default function AnaliseDadosPage() {
               </div>
             </div>
             
-            {/* Seção de informações e botão carregar mais */}
+
+            {/* Seção de informações dos dados */}
             <div className="mt-4 flex items-center justify-between">
-              <div className="flex items-center gap-4 text-sm text-slate-600">
+              <div className="flex items-center gap-3 text-sm text-slate-600">
                 <span>Total de SKUs: {totalSkus.toLocaleString('pt-BR')}</span>
                 <span>Exibindo: {dadosProcessados.length.toLocaleString('pt-BR')}</span>
-                {hasMoreData && (
-                  <span className="text-blue-600 font-medium">
-                    Mais dados disponíveis
-                  </span>
-                )}
               </div>
-              
-              {hasMoreData && (
-                <Button
-                  onClick={carregarMaisDados}
-                  disabled={loadingMore}
-                  variant="outline"
-                  size="sm"
-                  className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                >
-                  {loadingMore ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                      Carregando...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Carregar Mais Dados
-                    </>
-                  )}
-                </Button>
-              )}
             </div>
             
             {/* Progress indicator para salvamento */}
