@@ -8,13 +8,15 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-import { ArrowUpDown, Filter, Search, X, Edit2, Save, BarChart3, Download, Upload, ArrowLeft, ChevronUp, ChevronDown, Check, Plus } from 'lucide-react'
+import { ArrowUpDown, Filter, Search, X, Edit2, Save, BarChart3, Download, Upload, ArrowLeft, ChevronUp, ChevronDown, Check, Plus, Menu, Home, Calculator } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import * as XLSX from 'xlsx'
+import { useRouter } from 'next/navigation'
 
 // Função debounce customizada para evitar dependências externas
 function debounce<T extends (...args: any[]) => any>(
@@ -41,7 +43,9 @@ type SortField = 'sku' | 'fml_item' | 'media_prevista' | 'dt_implant' | 'calculo
 type SortDirection = 'asc' | 'desc'
 
 export default function AnaliseDadosPage() {
+  const router = useRouter()
   const [dados, setDados] = useState<PrevisaoDemanda[]>([])
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [editingRow, setEditingRow] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>('')
@@ -208,6 +212,32 @@ export default function AnaliseDadosPage() {
   useEffect(() => {
     carregarDados()
   }, [])
+
+  // Verificar se há dados calculados no sessionStorage e notificar o usuário
+  useEffect(() => {
+    const savedResults = sessionStorage.getItem('calculationResults')
+    const savedData = sessionStorage.getItem('calculationData')
+    
+    if (savedResults && savedData) {
+      try {
+        const results = JSON.parse(savedResults)
+        const data = JSON.parse(savedData)
+        const skuCount = Object.keys(results).length
+        
+        toast({
+          title: "Previsão Imputada com Sucesso!",
+          description: `Os valores calculados foram inseridos automaticamente na coluna "Cálculo Realizado" para ${skuCount} SKUs. Média geral: ${data.averageValue?.toLocaleString('pt-BR')} unidades.`,
+          duration: 8000,
+        })
+        
+        // Limpar dados do sessionStorage após a notificação
+        sessionStorage.removeItem('calculationResults')
+        sessionStorage.removeItem('calculationData')
+      } catch (e) {
+        console.warn('Erro ao processar dados salvos:', e)
+      }
+    }
+  }, [dados]) // Executar quando os dados forem carregados
 
   // Função para iniciar edição
   const iniciarEdicao = (sku: string, valorAtual?: number) => {
@@ -466,40 +496,155 @@ export default function AnaliseDadosPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <Toaster />
-      
-      {/* Header */}
-      <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 shadow-xl">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Link href="/">
-                <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Voltar
-                </Button>
-              </Link>
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                <BarChart3 className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-white tracking-tight">Análise de Dados</h1>
-                <p className="text-slate-300 text-xs">Comparação de Previsões e Cálculos Realizados</p>
+    <div className="h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex overflow-hidden">
+      {/* Menu Lateral */}
+      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SheetTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="fixed top-4 left-4 z-50 lg:hidden bg-white/95 border-[#39B6CA]/30 text-[#39B6CA] hover:bg-[#39B6CA] hover:text-white shadow-lg backdrop-blur-sm transition-all duration-300"
+          >
+            <Menu className="h-4 w-4" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-80 p-0 bg-white border-r border-gray-100 shadow-2xl">
+          <div className="flex flex-col h-full">
+            <div className="bg-gradient-to-br from-[#39B6CA] to-[#2A9BB8] p-8 shadow-lg">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm">
+                  <BarChart3 className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white tracking-tight">SupplyMind</h2>
+                  <p className="text-white/80 text-sm font-medium">Previsão de Demanda</p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-slate-300">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-xs">Online</span>
+            <nav className="flex-1 p-8 space-y-4">
+              <Button
+                variant="ghost"
+                className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#39B6CA]/10 hover:text-[#39B6CA] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+                onClick={() => {
+                  router.push('/')
+                  setSidebarOpen(false)
+                }}
+              >
+                <div className="w-10 h-10 bg-[#39B6CA]/10 rounded-xl flex items-center justify-center mr-4">
+                  <Calculator className="h-5 w-5 text-[#39B6CA]" />
+                </div>
+                <div className="text-left">
+                  <div className="font-bold text-base">Cálculo</div>
+                  <div className="text-sm opacity-70">Previsão de Demanda</div>
+                </div>
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full justify-start h-14 bg-gradient-to-r from-[#39B6CA] to-[#2A9BB8] text-white hover:from-[#2A9BB8] hover:to-[#1E8AA3] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+                onClick={() => {
+                  router.push('/analise-dados')
+                  setSidebarOpen(false)
+                }}
+              >
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-4">
+                  <BarChart3 className="h-5 w-5 text-white" />
+                </div>
+                <div className="text-left">
+                  <div className="font-bold text-base">Análise</div>
+                  <div className="text-sm opacity-90">Dados e Resultados</div>
+                </div>
+              </Button>
+            </nav>
+            <div className="p-8 border-t border-gray-100">
+              <div className="text-xs text-gray-500 text-center">
+                <p className="font-medium">Sistema de Previsão</p>
+                <p className="opacity-70">Versão 1.0</p>
+              </div>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Menu Lateral Desktop */}
+      <div className="hidden lg:flex lg:w-80 lg:flex-col lg:bg-white lg:border-r lg:border-gray-100 lg:shadow-2xl">
+        <div className="bg-gradient-to-br from-[#39B6CA] to-[#2A9BB8] p-8 shadow-lg">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm">
+              <BarChart3 className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white tracking-tight">SupplyMind</h2>
+              <p className="text-white/80 text-sm font-medium">Previsão de Demanda</p>
             </div>
           </div>
         </div>
-      </header>
+        <nav className="flex-1 p-8 space-y-4">
+          <Button
+            variant="ghost"
+            className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#39B6CA]/10 hover:text-[#39B6CA] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+            onClick={() => router.push('/')}
+          >
+            <div className="w-10 h-10 bg-[#39B6CA]/10 rounded-xl flex items-center justify-center mr-4">
+              <Calculator className="h-5 w-5 text-[#39B6CA]" />
+            </div>
+            <div className="text-left">
+              <div className="font-bold text-base">Cálculo</div>
+              <div className="text-sm opacity-70">Previsão de Demanda</div>
+            </div>
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start h-14 bg-gradient-to-r from-[#39B6CA] to-[#2A9BB8] text-white hover:from-[#2A9BB8] hover:to-[#1E8AA3] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+            onClick={() => router.push('/analise-dados')}
+          >
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-4">
+              <BarChart3 className="h-5 w-5 text-white" />
+            </div>
+            <div className="text-left">
+              <div className="font-bold text-base">Análise</div>
+              <div className="text-sm opacity-90">Dados e Resultados</div>
+            </div>
+          </Button>
+        </nav>
+        <div className="p-8 border-t border-gray-100">
+          <div className="text-xs text-gray-500 text-center">
+            <p className="font-medium">Sistema de Previsão</p>
+            <p className="opacity-70">Versão 1.0</p>
+          </div>
+        </div>
+      </div>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">
+      {/* Conteúdo Principal */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+      <Toaster />
+      
+        {/* Header */}
+        <header className="bg-[#32ACC1] shadow-xl flex-shrink-0">
+          <div className="container mx-auto px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="lg:hidden w-8"></div>
+                <div className="w-8 h-8 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm">
+                  <BarChart3 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-white tracking-tight">Análise de Dados</h1>
+                  <p className="text-slate-300 text-xs">Comparação de Previsões e Cálculos Realizados</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-slate-300">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span className="text-xs">Online</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="flex-1 overflow-auto bg-gradient-to-br from-[#39B6CA]/5 via-[#2A9BB8]/10 to-[#1E8AA3]/15">
+          <div className="container mx-auto px-4 py-6">
         <Card className="bg-white/90 backdrop-blur-sm shadow-xl border-0 rounded-2xl">
-          <CardHeader className="bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-t-2xl p-2">
+          <CardHeader className="bg-gradient-to-r from-[#1E8AA3] to-[#39B6CA] text-white rounded-t-2xl p-2">
             {/* Seção de Filtros Compacta */}
             <div className="p-2">
               <div className="flex items-center gap-2 mb-2">
@@ -596,16 +741,15 @@ export default function AnaliseDadosPage() {
                     onClick={handleSaveAndExport}
                     disabled={isSaving || dadosProcessados.length === 0}
                     variant="outline"
-                    size="sm"
-                    className="bg-emerald-800 border-emerald-600 text-emerald-100 hover:bg-emerald-700 hover:border-emerald-500 h-8 px-3 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    size="lg"
+                    className="bg-[#172133] border-[#172133] text-white hover:bg-[#0f1a2a] hover:border-[#0f1a2a] h-12 w-12 p-0 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
                     title={isSaving ? 'Salvando...' : 'Salvar e Exportar'}
                   >
                     {isSaving ? (
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-emerald-300"></div>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                     ) : (
-                      <Download className="w-3 h-3 mr-1" />
+                      <Download className="w-6 h-6" />
                     )}
-                    {!isSaving && "Exportar"}
                   </Button>
                 </div>
               </div>
@@ -614,18 +758,18 @@ export default function AnaliseDadosPage() {
           
           <CardContent className="p-6">
             <div className="rounded-lg border border-slate-200 h-[640px] flex flex-col">
-              <div className="sticky top-0 bg-slate-800 z-50 border-b-2 border-slate-600">
+              <div className="sticky top-0 bg-[#39ca96] z-50 border-b-2 border-[#39ca96]">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-slate-800">
-                      <TableHead className="font-semibold text-white bg-slate-800 border-r border-slate-700 text-sm w-32">
+                    <TableRow className="bg-[#39ca96]">
+                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-32">
                         <div className="flex items-center justify-between">
                           <span>Código Item</span>
                           <div className="flex flex-col">
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-4 w-4 p-0 text-white hover:text-slate-300 hover:bg-slate-700"
+                              className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20"
                               onClick={() => handleSort('sku')}
                             >
                               <ArrowUpDown className="w-3 h-3" />
@@ -638,14 +782,14 @@ export default function AnaliseDadosPage() {
                           </div>
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-white bg-slate-800 border-r border-slate-700 text-sm w-20">
+                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-20">
                         <div className="flex items-center justify-between">
                           <span>Família</span>
                           <div className="flex flex-col">
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-4 w-4 p-0 text-white hover:text-slate-300 hover:bg-slate-700"
+                              className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20"
                               onClick={() => handleSort('fml_item')}
                             >
                               <ArrowUpDown className="w-3 h-3" />
@@ -658,14 +802,14 @@ export default function AnaliseDadosPage() {
                           </div>
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-white bg-slate-800 border-r border-slate-700 text-sm w-24">
+                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24">
                         <div className="flex items-center justify-between">
                           <span>Média Atual</span>
                           <div className="flex flex-col">
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-4 w-4 p-0 text-white hover:text-slate-300 hover:bg-slate-700"
+                              className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20"
                               onClick={() => handleSort('media_prevista')}
                             >
                               <ArrowUpDown className="w-3 h-3" />
@@ -678,14 +822,14 @@ export default function AnaliseDadosPage() {
                           </div>
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-white bg-slate-800 border-r border-slate-700 text-sm w-24">
+                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24">
                         <div className="flex items-center justify-between">
                           <span>Data Implant.</span>
                           <div className="flex flex-col">
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-4 w-4 p-0 text-white hover:text-slate-300 hover:bg-slate-700"
+                              className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20"
                               onClick={() => handleSort('dt_implant')}
                             >
                               <ArrowUpDown className="w-3 h-3" />
@@ -698,14 +842,14 @@ export default function AnaliseDadosPage() {
                           </div>
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-white bg-slate-800 border-r border-slate-700 text-sm w-28">
+                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-28">
                         <div className="flex items-center justify-between">
                           <span>Cálculo Realizado</span>
                           <div className="flex flex-col">
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-4 w-4 p-0 text-white hover:text-slate-300 hover:bg-slate-700"
+                              className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20"
                               onClick={() => handleSort('calculo_realizado')}
                             >
                               <ArrowUpDown className="w-3 h-3" />
@@ -718,14 +862,14 @@ export default function AnaliseDadosPage() {
                           </div>
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-white bg-slate-800 border-r border-slate-700 text-sm w-24">
+                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24">
                         <div className="flex items-center justify-between">
                           <span>Diferença (%)</span>
                           <div className="flex flex-col">
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-4 w-4 p-0 text-white hover:text-slate-300 hover:bg-slate-700"
+                              className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20"
                               onClick={() => handleSort('diferenca')}
                             >
                               <ArrowUpDown className="w-3 h-3" />
@@ -738,7 +882,7 @@ export default function AnaliseDadosPage() {
                           </div>
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-white bg-slate-800 text-sm w-20 text-center">Ações</TableHead>
+                      <TableHead className="font-semibold text-white bg-[#278190] text-sm w-20 text-center">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                 </Table>
@@ -874,8 +1018,10 @@ export default function AnaliseDadosPage() {
               </div>
             )}
           </CardContent>
-        </Card>
-      </main>
+          </Card>
+          </div>
+        </main>
+      </div>
 
       {/* Popup de resultado */}
       {showResultPopup && resultPopupState && (

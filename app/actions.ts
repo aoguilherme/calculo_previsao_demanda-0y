@@ -146,6 +146,27 @@ export async function calculateDemandForecast(
       return { success: false, error: "Nenhum dado válido encontrado no arquivo CSV" }
     }
 
+    // Validar se as datas do período de análise existem no CSV
+    // Converter as datas do CSV para formato de comparação (ano-mês)
+    const datasDisponiveisSet = new Set(vendasData.map(item => {
+      const data = item.data as Date
+      return `${data.getFullYear()}-${(data.getMonth() + 1).toString().padStart(2, '0')}`
+    }))
+    
+    const dataInicioComparacao = `${dataInicio.getFullYear()}-${(dataInicio.getMonth() + 1).toString().padStart(2, '0')}`
+    const dataFimComparacao = `${dataFim.getFullYear()}-${(dataFim.getMonth() + 1).toString().padStart(2, '0')}`
+    
+    const dataInicioFormatada = convertMonthNumberToName(dataInicio.getMonth(), dataInicio.getFullYear())
+    const dataFimFormatada = convertMonthNumberToName(dataFim.getMonth(), dataFim.getFullYear())
+    
+    if (!datasDisponiveisSet.has(dataInicioComparacao)) {
+      return { success: false, error: `A data de início ${dataInicioFormatada} não foi encontrada no arquivo CSV. Verifique se o período selecionado está disponível nos dados.` }
+    }
+    
+    if (!datasDisponiveisSet.has(dataFimComparacao)) {
+      return { success: false, error: `A data de fim ${dataFimFormatada} não foi encontrada no arquivo CSV. Verifique se o período selecionado está disponível nos dados.` }
+    }
+
     // Criar mapeamento SKU -> Família
     const skuFamiliaMap = new Map<string, string>()
     vendasData.forEach(venda => {

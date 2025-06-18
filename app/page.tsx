@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { X, FileText, BarChart3, Upload, CheckCircle, Calendar, Plus, Edit2, Trash2, Calculator, ArrowRight, AlertTriangle, AlertCircle, Download } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { X, FileText, BarChart3, Upload, CheckCircle, Calendar, Plus, Edit2, Trash2, Calculator, ArrowRight, AlertTriangle, AlertCircle, Download, HelpCircle, Menu, Home, BarChart } from "lucide-react"
 import { calculateDemandForecast } from "./actions"
 import { clearPrevisoesDemanda } from "./clearTableAction"
 import * as XLSX from 'xlsx'
@@ -50,17 +52,19 @@ export default function DemandForecastPage() {
     return `${year}-${month.padStart(2, '0')}-01`
   }
 
-  // Valores padrão - inicializados com valores estáticos para evitar hidratação (formato mm/aaaa)
+  // Valores padrão - inicializados sem valores para evitar hidratação (formato mm/aaaa)
   const defaultValues = 
   {
-    dataInicio: "01/2024",
-    dataFim: "12/2024",
+    dataInicio: "",
+    dataFim: "",
     diasPrevisao: "1"
   }
 
   // Estados para controlar os valores dos campos
   const [fieldValues, setFieldValues] = useState(defaultValues)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedMediaFile, setSelectedMediaFile] = useState<File | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const [csvData, setCsvData] = useState<Array<{data: Date, sku: string, familia: string, vendas: number}>>([]) // Dados do CSV processados
 
@@ -117,18 +121,13 @@ export default function DemandForecastPage() {
   // Função para exportar planilha de resultados dos cálculos Prophet+ARIMA
   const handleExportResults = async () => {
     try {
-      // Verificar se existem resultados de cálculo salvos
-      const dadosCalculo = sessionStorage.getItem('dadosCalculo')
-      if (!dadosCalculo) {
+      // Verificar se existem resultados no state atual
+      if (!state || !state.resultados || !Array.isArray(state.resultados) || state.resultados.length === 0) {
         alert('Nenhum resultado de cálculo encontrado. Execute o cálculo primeiro.')
         return
       }
 
-      const { resultados } = JSON.parse(dadosCalculo)
-      if (!resultados || !Array.isArray(resultados) || resultados.length === 0) {
-        alert('Nenhum resultado válido encontrado para exportar.')
-        return
-      }
+      const resultados = state.resultados
 
       // Preparar dados para o Excel
       const excelData = resultados.map((item: any) => ({
@@ -159,29 +158,7 @@ export default function DemandForecastPage() {
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
 
-      // Processar resultados para criar mapeamento SKU -> valor calculado (coluna "Media")
-      const calculationResults: Record<string, number> = {}
-      
-      if (Array.isArray(resultados)) {
-        resultados.forEach((item: any) => {
-          if (item.sku && typeof item.media === 'number') {
-            calculationResults[item.sku] = item.media
-          }
-        })
-      }
-      
-      // Salvar mapeamento de resultados de cálculo para a página de análise
-      sessionStorage.setItem('calculationResults', JSON.stringify(calculationResults))
-      console.log('💾 Resultados de cálculo salvos para análise:', Object.keys(calculationResults).length, 'SKUs')
-
-      // Fechar o popup de resultados
-      setShowResultPopup(false)
-
-      // Navegar para a página de análise de dados
-      router.push('/analise-dados')
-
-      // Mostrar mensagem de sucesso
-      console.log('✅ Planilha exportada e dados transferidos para análise com sucesso!')
+      console.log('✅ Planilha exportada com sucesso!')
     } catch (error) {
       console.error('Erro ao exportar planilha:', error)
       alert('Erro ao exportar planilha. Tente novamente.')
@@ -383,23 +360,159 @@ export default function DemandForecastPage() {
     const fileInput = document.getElementById("csvFile") as HTMLInputElement
     if (fileInput) fileInput.value = ""
   }
+
+  const handleMediaFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file && file.type === "text/csv") {
+      setSelectedMediaFile(file)
+    } else {
+      alert("Por favor, selecione um arquivo CSV válido.")
+      event.target.value = ""
+    }
+  }
+
+  const removeMediaFile = () => {
+    setSelectedMediaFile(null)
+    // Reset file input value
+    const fileInput = document.getElementById("mediaFile") as HTMLInputElement
+    if (fileInput) fileInput.value = ""
+  }
+
   return (
-    <div className="h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex flex-col overflow-hidden">
+    <div className="h-screen bg-gradient-to-br from-[#39B6CA]/5 via-[#39B6CA]/10 to-[#2A9BB8]/15 flex overflow-hidden">
+      {/* Menu Lateral */}
+       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+         <SheetTrigger asChild>
+           <Button
+             variant="outline"
+             size="sm"
+             className="fixed top-4 left-4 z-50 lg:hidden bg-white/95 border-[#39B6CA]/30 text-[#39B6CA] hover:bg-[#39B6CA] hover:text-white shadow-lg backdrop-blur-sm transition-all duration-300"
+           >
+             <Menu className="h-4 w-4" />
+           </Button>
+         </SheetTrigger>
+         <SheetContent side="left" className="w-80 p-0 bg-white border-r border-gray-100 shadow-2xl">
+           <div className="flex flex-col h-full">
+             <div className="bg-gradient-to-br from-[#39B6CA] to-[#2A9BB8] p-8 shadow-lg">
+               <div className="flex items-center gap-4">
+                 <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm">
+                   <Calculator className="w-7 h-7 text-white" />
+                 </div>
+                 <div>
+                   <h2 className="text-2xl font-bold text-white tracking-tight">Sistema</h2>
+                   <p className="text-white/80 text-sm font-medium">Previsão de Demanda</p>
+                 </div>
+               </div>
+             </div>
+             <nav className="flex-1 p-8 space-y-4">
+               <Button
+                 variant="ghost"
+                 className="w-full justify-start h-14 bg-gradient-to-r from-[#39B6CA] to-[#2A9BB8] text-white hover:from-[#2A9BB8] hover:to-[#1E8AA3] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+                 onClick={() => {
+                   router.push('/')
+                   setSidebarOpen(false)
+                 }}
+               >
+                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-4">
+                   <Calculator className="h-5 w-5" />
+                 </div>
+                 <div className="text-left">
+                   <div className="font-bold text-base">Cálculo</div>
+                   <div className="text-sm opacity-90">Previsão de Demanda</div>
+                 </div>
+               </Button>
+               <Button
+                 variant="ghost"
+                 className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#39B6CA]/10 hover:text-[#39B6CA] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+                 onClick={() => {
+                   router.push('/analise-dados')
+                   setSidebarOpen(false)
+                 }}
+               >
+                 <div className="w-10 h-10 bg-[#39B6CA]/10 rounded-xl flex items-center justify-center mr-4">
+                   <BarChart className="h-5 w-5 text-[#39B6CA]" />
+                 </div>
+                 <div className="text-left">
+                   <div className="font-bold text-base">Análise</div>
+                   <div className="text-sm opacity-70">Dados e Resultados</div>
+                 </div>
+               </Button>
+             </nav>
+             <div className="p-8 border-t border-gray-100">
+               <div className="text-xs text-gray-500 text-center">
+                 <p className="font-medium">Sistema de Previsão</p>
+                 <p className="opacity-70">Versão 1.0</p>
+               </div>
+             </div>
+           </div>
+         </SheetContent>
+       </Sheet>
+
+       {/* Menu Lateral Desktop */}
+       <div className="hidden lg:flex lg:w-80 lg:flex-col lg:bg-white lg:border-r lg:border-gray-100 lg:shadow-2xl">
+         <div className="bg-gradient-to-br from-[#39B6CA] to-[#2A9BB8] p-8 shadow-lg">
+           <div className="flex items-center gap-4">
+             <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm">
+               <Calculator className="w-7 h-7 text-white" />
+             </div>
+             <div>
+               <h2 className="text-2xl font-bold text-white tracking-tight">SupplyMind</h2>
+               <p className="text-white/80 text-sm font-medium">Previsão de Demanda</p>
+             </div>
+           </div>
+         </div>
+         <nav className="flex-1 p-8 space-y-4">
+           <Button
+             variant="ghost"
+             className="w-full justify-start h-14 bg-gradient-to-r from-[#39B6CA] to-[#2A9BB8] text-white hover:from-[#2A9BB8] hover:to-[#1E8AA3] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+           >
+             <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-4">
+               <Calculator className="h-5 w-5" />
+             </div>
+             <div className="text-left">
+               <div className="font-bold text-base">Cálculo</div>
+               <div className="text-sm opacity-90">Previsão de Demanda</div>
+             </div>
+           </Button>
+           <Button
+             variant="ghost"
+             className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#39B6CA]/10 hover:text-[#39B6CA] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+             onClick={() => router.push('/analise-dados')}
+           >
+             <div className="w-10 h-10 bg-[#39B6CA]/10 rounded-xl flex items-center justify-center mr-4">
+               <BarChart className="h-5 w-5 text-[#39B6CA]" />
+             </div>
+             <div className="text-left">
+               <div className="font-bold text-base">Análise</div>
+               <div className="text-sm opacity-70">Dados e Resultados</div>
+             </div>
+           </Button>
+         </nav>
+         <div className="p-8 border-t border-gray-100">
+           <div className="text-xs text-gray-500 text-center">
+             <p className="font-medium">Sistema de Previsão</p>
+             <p className="opacity-70">Versão 1.0</p>
+           </div>
+         </div>
+       </div>
+
+      {/* Conteúdo Principal */}
+      <div className="flex-1 flex flex-col overflow-hidden">
       {/* Compact Header */}
-      <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 shadow-xl flex-shrink-0">
+      <header className="bg-gradient-to-r from-[#39B6CA] via-[#2A9BB8] to-[#1E8AA3] shadow-xl flex-shrink-0">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
                 <BarChart3 className="w-5 h-5 text-white" />
               </div>
               <div>
                 <h1 className="text-lg font-bold text-white tracking-tight">Previsão de Demanda</h1>
-                <p className="text-slate-300 text-xs">Sistema Inteligente de Análise Preditiva</p>
+                <p className="text-white/80 text-xs">Sistema Inteligente de Análise Preditiva</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-slate-300">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            <div className="flex items-center gap-2 text-white/80">
+              <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse"></div>
               <span className="text-xs">Online</span>
             </div>
           </div>
@@ -410,40 +523,17 @@ export default function DemandForecastPage() {
       <main className="flex-1 container mx-auto px-4 py-4 overflow-hidden">
         <div className="h-full max-w-7xl mx-auto">
           {/* Main Form Card - Full Height */}
-          <Card className="h-full bg-white/90 backdrop-blur-sm shadow-xl border-0 rounded-2xl overflow-hidden flex flex-col">
-            <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-3 flex-shrink-0">
+          <Card className="h-full bg-white/95 backdrop-blur-sm shadow-xl border-0 rounded-2xl overflow-hidden flex flex-col">
+            <div className="bg-gradient-to-r from-[#39B6CA] to-[#2A9BB8] px-6 py-3 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-white text-lg font-bold flex items-center gap-2">
                     <FileText className="w-5 h-5" />
                     Configuração da Análise
                   </CardTitle>
-                  <p className="text-slate-300 text-sm mt-1">Preencha os dados necessários para iniciar o processamento</p>
+                  <p className="text-white/90 text-sm mt-1">Preencha os dados necessários para iniciar o processamento</p>
                 </div>
-                <div className="flex gap-2">
-                  <Link href="/analise-dados">
-                    <Button 
-                      type="button"
-                      variant="outline" 
-                      size="sm"
-                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/30 transition-all duration-200"
-                    >
-                      <BarChart3 className="w-4 h-4 mr-2" />
-                      Análise de Dados
-                    </Button>
-                  </Link>
-                  <Button 
-                    type="button"
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleClearTable}
-                    disabled={isClearingTable}
-                    className="bg-red-500/10 border-red-400/20 text-red-200 hover:bg-red-500/20 hover:border-red-400/30 transition-all duration-200 disabled:opacity-50"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    {isClearingTable ? 'Excluindo...' : 'Limpar Tabela'}
-                  </Button>
-                </div>
+
               </div>
             </div>
           <CardContent className="flex-1 p-4 overflow-hidden">
@@ -464,29 +554,147 @@ export default function DemandForecastPage() {
               <input type="hidden" name="diasPrevisao" value={fieldValues.diasPrevisao} />
               <input type="hidden" name="datasAtipicas" value={JSON.stringify(datasAtipicas)} />
               
-              {/* Compact Grid Layout */}
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden">
+              {/* New Layout - Fixed Height Grid */}
+              <div className="flex-1 flex flex-col gap-6 overflow-hidden">
                 
-                {/* Left Column - Upload & Dates */}
-                <div className="space-y-4">
-                  {/* Upload Section - Histórico de Vendas */}
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-6 h-6 bg-blue-500 rounded-lg flex items-center justify-center">
+                {/* Top Row - 3 Columns with standardized height */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  
+                  {/* Superior Esquerdo - Upload Files */}
+                  <div className="space-y-4">
+                    {/* Upload Section - Arquivo de Média */}
+                    <div className="bg-gradient-to-br from-[#1E8AA3]/10 to-[#39B6CA]/15 rounded-xl p-3 border border-[#39B6CA]/20 h-[280px] flex flex-col">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 bg-[#39B6CA] rounded-lg flex items-center justify-center">
+                          <FileText className="w-4 h-4 text-white" />
+                        </div>
+                        <Label htmlFor="mediaFile" className="text-sm font-semibold text-black">
+                          Arquivo de Média (CSV) <span className="text-red-500">*</span>
+                        </Label>
+                        <TooltipProvider>
+                           <Tooltip>
+                             <TooltipTrigger asChild>
+                               <div className="w-5 h-5 bg-[#39B6CA]/20 hover:bg-[#39B6CA]/30 rounded-full flex items-center justify-center cursor-help transition-colors">
+                                 <HelpCircle className="w-3 h-3 text-[#39B6CA]" />
+                               </div>
+                             </TooltipTrigger>
+                             <TooltipContent side="bottom" className="bg-[#172133] border-[#172133] shadow-xl max-w-sm">
+                               <div className="p-2">
+                                 <div className="flex items-center gap-2 mb-3">
+                                   <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center">
+                                     <FileText className="w-4 h-4 text-[#172133]" />
+                                   </div>
+                                   <h4 className="font-semibold text-white">Formato do Arquivo de Média</h4>
+                                 </div>
+                                 <div className="space-y-2 text-xs text-white">
+                                   <div className="flex items-center gap-2">
+                                     <div className="w-1 h-1 bg-white rounded-full"></div>
+                                     <span><strong>Formato:</strong> CSV</span>
+                                   </div>
+                                   <div className="flex items-center gap-2">
+                                     <div className="w-1 h-1 bg-white rounded-full"></div>
+                                     <span><strong>Separador:</strong> ponto e vírgula (;)</span>
+                                   </div>
+                                   <div className="flex items-center gap-2">
+                                     <div className="w-1 h-1 bg-white rounded-full"></div>
+                                     <span><strong>Colunas:</strong> sku, fml_item, media_prevista e dt_implat</span>
+                                   </div>
+                                   <div className="flex items-center gap-2">
+                                     <div className="w-1 h-1 bg-white rounded-full"></div>
+                                     <span><strong>Data:</strong> aaaa/mm/dd</span>
+                                   </div>
+                                 </div>
+                               </div>
+                             </TooltipContent>
+                           </Tooltip>
+                         </TooltipProvider>
+                      </div>
+                      <div className="flex-1 flex flex-col justify-center">
+                        <div className="flex items-center space-x-2">
+                        <Input
+                          id="mediaFile"
+                          name="mediaFile"
+                          type="file"
+                          accept=".csv"
+                          className="flex-1 h-9 text-xs border-2 border-dashed border-[#39B6CA]/40 bg-[#1E8AA3]/5 hover:border-[#39B6CA]/60 transition-colors file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#39B6CA]/10 file:text-[#1E8AA3]"
+                          onChange={handleMediaFileChange}
+                        />
+                        {selectedMediaFile && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={removeMediaFile}
+                            className="h-9 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                            title="Remover arquivo"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                      {selectedMediaFile && (
+                        <div className="mt-1.5 p-1.5 bg-[#39B6CA]/10 border border-[#39B6CA]/20 rounded-lg">
+                          <p className="text-xs text-[#1E8AA3] flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            {selectedMediaFile.name}
+                          </p>
+                        </div>
+                      )}
+                      </div>
+                    </div>
+
+                    {/* Upload Section - Histórico de Vendas */}
+                  <div className="bg-gradient-to-br from-[#1E8AA3]/10 to-[#39B6CA]/15 rounded-xl p-3 border border-[#39B6CA]/20 h-[280px] flex flex-col">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 bg-[#39B6CA] rounded-lg flex items-center justify-center">
                         <FileText className="w-4 h-4 text-white" />
                       </div>
-                      <Label htmlFor="csvFile" className="text-sm font-semibold text-slate-800">
+                      <Label htmlFor="csvFile" className="text-sm font-semibold text-black">
                         Arquivo de Vendas (CSV) <span className="text-red-500">*</span>
                       </Label>
+                      <TooltipProvider>
+                         <Tooltip>
+                           <TooltipTrigger asChild>
+                             <div className="w-5 h-5 bg-[#39B6CA]/20 hover:bg-[#39B6CA]/30 rounded-full flex items-center justify-center cursor-help transition-colors">
+                               <HelpCircle className="w-3 h-3 text-[#39B6CA]" />
+                             </div>
+                           </TooltipTrigger>
+                           <TooltipContent side="bottom" className="bg-[#172133] border-[#172133] shadow-xl max-w-sm">
+                             <div className="p-2">
+                               <div className="flex items-center gap-2 mb-3">
+                                 <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center">
+                                   <FileText className="w-4 h-4 text-[#172133]" />
+                                 </div>
+                                 <h4 className="font-semibold text-white">Formato do Arquivo de Vendas</h4>
+                               </div>
+                               <div className="space-y-2 text-xs text-white">
+                                 <div className="flex items-center gap-2">
+                                   <div className="w-1 h-1 bg-white rounded-full"></div>
+                                   <span><strong>Formato:</strong> CSV</span>
+                                 </div>
+                                 <div className="flex items-center gap-2">
+                                   <div className="w-1 h-1 bg-white rounded-full"></div>
+                                   <span><strong>Colunas:</strong> Data (DD/MM/AAAA), SKU, Família, Vendas</span>
+                                 </div>
+                                 <div className="flex items-center gap-2">
+                                   <div className="w-1 h-1 bg-white rounded-full"></div>
+                                   <span><strong>Exemplo:</strong> 01/01/2024,SKU001,Família A,100.00</span>
+                                 </div>
+                               </div>
+                             </div>
+                           </TooltipContent>
+                         </Tooltip>
+                       </TooltipProvider>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex-1 flex flex-col justify-center">
+                      <div className="flex items-center space-x-2">
                       <Input
                         id="csvFile"
                         name="csvFile"
                         type="file"
                         accept=".csv"
                         required
-                        className="flex-1 h-9 text-xs border-2 border-dashed border-blue-300 bg-white/50 hover:border-blue-400 transition-colors file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700"
+                        className="flex-1 h-9 text-xs border-2 border-dashed border-[#39B6CA]/40 bg-[#1E8AA3]/5 hover:border-[#39B6CA]/60 transition-colors file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#39B6CA]/10 file:text-[#1E8AA3]"
                         onChange={handleFileChange}
                       />
                       {selectedFile && (
@@ -503,163 +711,212 @@ export default function DemandForecastPage() {
                       )}
                     </div>
                     {selectedFile && (
-                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
-                        <p className="text-xs text-green-700 flex items-center gap-1">
+                      <div className="mt-1.5 p-1.5 bg-[#39B6CA]/10 border border-[#39B6CA]/20 rounded-lg">
+                        <p className="text-xs text-[#1E8AA3] flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
                           {selectedFile.name}
                         </p>
                       </div>
                     )}
-                  </div>
-
-
-
-                  {/* Date Configuration */}
-                  <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-4 border border-slate-200">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-6 h-6 bg-slate-600 rounded-lg flex items-center justify-center">
-                        <Calendar className="w-4 h-4 text-white" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-slate-800">Período de Análise</h3>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      <div>
-                        <Label htmlFor="dataInicio" className="text-xs font-medium text-slate-700">
-                          Data Início <span className="text-red-500">*</span>
-                        </Label>
-                        <div className="relative">
-                          <Input
-                            id="dataInicio"
-                            name="dataInicio"
-                            type="text"
-                            required
-                            className={`h-8 text-xs bg-white border transition-all duration-200 pr-6 ${
-                              isFieldEdited("dataInicio") 
-                                ? 'border-blue-400 bg-blue-50' 
-                                : 'border-slate-200 hover:border-slate-300'
-                            }`}
-                            placeholder="mm/aaaa"
-                            value={fieldValues.dataInicio}
-                            onChange={(e) => {
-                              let value = e.target.value.replace(/\D/g, '')
-                              // Formatação automática: adiciona '/' após 2 dígitos
-                              if (value.length >= 2) {
-                                value = value.slice(0,2) + '/' + value.slice(2,6)
-                              }
-                              handleFieldChange("dataInicio", value)
-                            }}
-                            maxLength={7}
-                          />
-                          {isFieldEdited("dataInicio") && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-gray-200"
-                              onClick={() => resetField("dataInicio")}
-                              title="Resetar"
-                            >
-                              <X className="h-2 w-2 text-gray-500" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="dataFim" className="text-xs font-medium text-slate-700">
-                          Data Fim <span className="text-red-500">*</span>
-                        </Label>
-                        <div className="relative">
-                          <Input
-                            id="dataFim"
-                            name="dataFim"
-                            type="text"
-                            required
-                            className={`h-8 text-xs bg-white border transition-all duration-200 pr-6 ${
-                              isFieldEdited("dataFim") 
-                                ? 'border-indigo-400 bg-indigo-50' 
-                                : 'border-slate-200 hover:border-slate-300'
-                            }`}
-                            placeholder="mm/aaaa"
-                            value={fieldValues.dataFim}
-                            onChange={(e) => {
-                              let value = e.target.value.replace(/\D/g, '')
-                              // Formatação automática: adiciona '/' após 2 dígitos
-                              if (value.length >= 2) {
-                                value = value.slice(0,2) + '/' + value.slice(2,6)
-                              }
-                              handleFieldChange("dataFim", value)
-                            }}
-                            maxLength={7}
-                          />
-                          {isFieldEdited("dataFim") && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-gray-200"
-                              onClick={() => resetField("dataFim")}
-                              title="Resetar"
-                            >
-                              <X className="h-2 w-2 text-gray-500" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="diasPrevisao" className="text-xs font-medium text-slate-700">
-                          Meses Previsão <span className="text-red-500">*</span>
-                        </Label>
-                        <div className="relative">
-                          <Input
-                            id="diasPrevisao"
-                            name="diasPrevisao"
-                            type="number"
-                            required
-                            className={`h-8 text-xs bg-white border transition-all duration-200 pr-6 ${
-                              isFieldEdited("diasPrevisao") 
-                                ? 'border-green-400 bg-green-50' 
-                                : 'border-slate-200 hover:border-slate-300'
-                            }`}
-                            value={fieldValues.diasPrevisao}
-                            min="1"
-                            max="24"
-                            onChange={(e) => handleFieldChange("diasPrevisao", e.target.value)}
-                          />
-                          {isFieldEdited("diasPrevisao") && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-gray-200"
-                              onClick={() => resetField("diasPrevisao")}
-                              title="Resetar"
-                            >
-                              <X className="h-2 w-2 text-gray-500" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
                     </div>
                   </div>
+
+
+
                 </div>
 
-                {/* Middle Column - Atypical Dates */}
-                <div className="space-y-4">
+                  {/* Superior Central - Período de Análise */}
+                  <div className="space-y-4">
+                    {/* Date Configuration */}
+                    <div className="bg-gradient-to-br from-[#1E8AA3]/10 to-[#39B6CA]/15 rounded-xl p-4 border border-[#39B6CA]/20 h-[280px] flex flex-col">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 bg-[#39B6CA] rounded-lg flex items-center justify-center">
+                          <Calendar className="w-4 h-4 text-white" />
+                        </div>
+                        <h3 className="text-sm font-semibold text-black">Período de Análise</h3>
+                      </div>
+                      
+                      <div className="flex-1 flex flex-col justify-center space-y-4">
+                        <div>
+                          <Label htmlFor="dataInicio" className="text-xs font-medium text-[#1E8AA3]">
+                            Data Início <span className="text-red-500">*</span>
+                          </Label>
+                          <div className="relative">
+                            <Input
+                              id="dataInicio"
+                              name="dataInicio"
+                              type="text"
+                              required
+                              className={`h-8 text-xs bg-[#1E8AA3]/5 border transition-all duration-200 pr-6 ${
+                                isFieldEdited("dataInicio") 
+                                  ? 'border-[#39B6CA] bg-[#39B6CA]/10' 
+                                  : 'border-[#39B6CA]/30 hover:border-[#39B6CA]/50'
+                              }`}
+                              placeholder="mm/aaaa"
+                              value={fieldValues.dataInicio}
+                              onChange={(e) => {
+                                let value = e.target.value
+                                
+                                // Permitir deletar tudo completamente
+                                if (value === '') {
+                                  handleFieldChange("dataInicio", '')
+                                  return
+                                }
+                                
+                                // Remover caracteres não numéricos exceto a barra
+                                value = value.replace(/[^\d\/]/g, '')
+                                
+                                // Se o usuário deletou a barra, permitir continuar editando
+                                if (value.length <= 2 && !value.includes('/')) {
+                                  handleFieldChange("dataInicio", value)
+                                  return
+                                }
+                                
+                                // Formatação automática: adiciona '/' após 2 dígitos se não existir
+                                if (value.length >= 2 && !value.includes('/')) {
+                                  value = value.slice(0,2) + '/' + value.slice(2,6)
+                                }
+                                
+                                // Limitar o formato mm/aaaa
+                                if (value.length > 7) {
+                                  value = value.slice(0, 7)
+                                }
+                                
+                                handleFieldChange("dataInicio", value)
+                              }}
+                              maxLength={7}
+                            />
+                            {isFieldEdited("dataInicio") && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-gray-200"
+                                onClick={() => resetField("dataInicio")}
+                                title="Resetar"
+                              >
+                                <X className="h-2 w-2 text-gray-500" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="dataFim" className="text-xs font-medium text-[#1E8AA3]">
+                            Data Fim <span className="text-red-500">*</span>
+                          </Label>
+                          <div className="relative">
+                            <Input
+                              id="dataFim"
+                              name="dataFim"
+                              type="text"
+                              required
+                              className={`h-8 text-xs bg-[#1E8AA3]/5 border transition-all duration-200 pr-6 ${
+                                isFieldEdited("dataFim") 
+                                  ? 'border-[#39B6CA] bg-[#39B6CA]/10' 
+                                  : 'border-[#39B6CA]/30 hover:border-[#39B6CA]/50'
+                              }`}
+                              placeholder="mm/aaaa"
+                              value={fieldValues.dataFim}
+                              onChange={(e) => {
+                                let value = e.target.value
+                                
+                                // Permitir deletar tudo completamente
+                                if (value === '') {
+                                  handleFieldChange("dataFim", '')
+                                  return
+                                }
+                                
+                                // Remover caracteres não numéricos exceto a barra
+                                value = value.replace(/[^\d\/]/g, '')
+                                
+                                // Se o usuário deletou a barra, permitir continuar editando
+                                if (value.length <= 2 && !value.includes('/')) {
+                                  handleFieldChange("dataFim", value)
+                                  return
+                                }
+                                
+                                // Formatação automática: adiciona '/' após 2 dígitos se não existir
+                                if (value.length >= 2 && !value.includes('/')) {
+                                  value = value.slice(0,2) + '/' + value.slice(2,6)
+                                }
+                                
+                                // Limitar o formato mm/aaaa
+                                if (value.length > 7) {
+                                  value = value.slice(0, 7)
+                                }
+                                
+                                handleFieldChange("dataFim", value)
+                              }}
+                              maxLength={7}
+                            />
+                            {isFieldEdited("dataFim") && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-gray-200"
+                                onClick={() => resetField("dataFim")}
+                                title="Resetar"
+                              >
+                                <X className="h-2 w-2 text-gray-500" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="diasPrevisao" className="text-xs font-medium text-[#1E8AA3]">
+                            Meses Previsão <span className="text-red-500">*</span>
+                          </Label>
+                          <div className="relative">
+                            <Input
+                              id="diasPrevisao"
+                              name="diasPrevisao"
+                              type="number"
+                              required
+                              className={`h-8 text-xs bg-[#1E8AA3]/5 border transition-all duration-200 pr-6 ${
+                                isFieldEdited("diasPrevisao") 
+                                  ? 'border-[#39B6CA] bg-[#39B6CA]/10' 
+                                  : 'border-[#39B6CA]/30 hover:border-[#39B6CA]/50'
+                              }`}
+                              value={fieldValues.diasPrevisao}
+                              min="1"
+                              max="24"
+                              onChange={(e) => handleFieldChange("diasPrevisao", e.target.value)}
+                            />
+                            {isFieldEdited("diasPrevisao") && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-gray-200"
+                                onClick={() => resetField("diasPrevisao")}
+                                title="Resetar"
+                              >
+                                <X className="h-2 w-2 text-gray-500" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Superior Direito - Datas Atípicas */}
+                  <div className="space-y-4">
                   {/* Add New Atypical Date */}
-                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200">
+                  <div className="bg-gradient-to-br from-[#1E8AA3]/10 to-[#39B6CA]/15 rounded-xl p-4 border border-[#39B6CA]/20 h-[280px] flex flex-col">
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-6 h-6 bg-amber-500 rounded-lg flex items-center justify-center">
+                      <div className="w-6 h-6 bg-[#39B6CA] rounded-lg flex items-center justify-center">
                         <Plus className="w-4 h-4 text-white" />
                       </div>
-                      <h3 className="text-sm font-semibold text-slate-800">Datas Atípicas</h3>
+                      <h3 className="text-sm font-semibold text-black">Datas Atípicas</h3>
                     </div>
                     
-                    <div className="space-y-2">
+                    <div className="flex-1 flex flex-col justify-center space-y-3">
                       <div>
-                        <Label className="text-xs font-medium text-slate-600">Data</Label>
+                        <Label className="text-xs font-medium text-[#1E8AA3]">Data</Label>
                         <div className="relative">
                           <Input
                             type="text"
@@ -673,7 +930,7 @@ export default function DemandForecastPage() {
                               if (dataAtipicaError) setDataAtipicaError('')
                             }}
                             maxLength={7}
-                            className={`h-8 text-xs border-amber-200 focus:border-amber-400 bg-amber-50/50 pr-6 ${
+                            className={`h-8 text-xs border-[#39B6CA]/30 focus:border-[#39B6CA] bg-[#1E8AA3]/5 pr-6 ${
                               dataAtipicaError ? 'border-red-300 focus:border-red-400' : ''
                             }`}
                           />
@@ -682,38 +939,38 @@ export default function DemandForecastPage() {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-amber-200"
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-[#39B6CA]/20"
                               onClick={() => {
                                 setNovaDataAtipica({ ...novaDataAtipica, data: '' })
                                 if (dataAtipicaError) setDataAtipicaError('')
                               }}
                               title="Limpar Data"
                             >
-                              <X className="h-2 w-2 text-amber-600" />
+                              <X className="h-2 w-2 text-[#39B6CA]" />
                             </Button>
                           )}
                         </div>
                       </div>
                       <div>
-                        <Label className="text-xs font-medium text-slate-600">Descrição</Label>
+                        <Label className="text-xs font-medium text-[#1E8AA3]">Descrição</Label>
                         <div className="relative">
                           <Input
                             type="text"
                             placeholder="Ex: Aumento de Preço"
                             value={novaDataAtipica.descricao}
                             onChange={(e) => setNovaDataAtipica({ ...novaDataAtipica, descricao: e.target.value })}
-                            className="h-8 text-xs border-amber-200 focus:border-amber-400 bg-amber-50/50 pr-6"
+                            className="h-8 text-xs border-[#39B6CA]/30 focus:border-[#39B6CA] bg-[#1E8AA3]/5 pr-6"
                           />
                           {novaDataAtipica.descricao && (
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-amber-200"
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-[#39B6CA]/20"
                               onClick={() => setNovaDataAtipica({ ...novaDataAtipica, descricao: '' })}
                               title="Limpar Descrição"
                             >
-                              <X className="h-2 w-2 text-amber-600" />
+                              <X className="h-2 w-2 text-[#39B6CA]" />
                             </Button>
                           )}
                         </div>
@@ -722,7 +979,7 @@ export default function DemandForecastPage() {
                         type="button"
                         onClick={adicionarDataAtipica}
                         size="sm"
-                        className="w-full h-8 text-xs bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors"
+                        className="w-full h-8 text-xs bg-[#172133] hover:bg-[#0f1a2a] text-white font-medium transition-colors"
                         disabled={!novaDataAtipica.data}
                       >
                         <Plus className="h-3 w-3 mr-1" />
@@ -754,8 +1011,8 @@ export default function DemandForecastPage() {
 
                   {/* List of Atypical Dates */}
                   {datasAtipicas.length > 0 && (
-                    <div className="bg-white rounded-xl border border-amber-100 shadow-sm overflow-hidden">
-                      <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2">
+                    <div className="bg-white rounded-xl border border-[#39B6CA]/20 shadow-sm overflow-hidden">
+                      <div className="bg-gradient-to-r from-[#39B6CA] to-[#2A9BB8] px-3 py-2">
                         <h4 className="text-white text-xs font-semibold flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           Cadastradas ({datasAtipicas.length})
@@ -808,57 +1065,54 @@ export default function DemandForecastPage() {
                     </div>
                   )}
                 </div>
-
-                {/* Right Column - Calculate Button & Info */}
-                <div className="space-y-4">
-                  <div className="bg-gradient-to-br from-slate-800 to-slate-700 rounded-xl p-4">
-                    <div className="text-center mb-3">
-                      <h3 className="text-white text-sm font-semibold mb-1">Pronto para Calcular?</h3>
-                      <p className="text-slate-300 text-xs">Clique para iniciar o processamento</p>
-                    </div>
-                    <Button
-                      type="submit"
-                      disabled={isPending || !selectedFile}
-                      size="lg"
-                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none"
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <Calculator className="h-4 w-4" />
-                        <span className="text-sm">{isPending ? "Calculando..." : "Calcular Previsão"}</span>
-                        {!isPending && <ArrowRight className="h-3 w-3" />}
+                </div>
+                
+                {/* Bottom Row - Calculate Button with proper spacing */}
+                <div className="flex justify-center pt-4">
+                  <div className="w-full max-w-md">
+                    <div className="bg-gradient-to-br from-[#1E8AA3] to-[#39B6CA] rounded-xl p-4">
+                      <div className="text-center mb-3">
+                        <div className="flex items-center justify-center gap-2">
+                          <h3 className="text-white text-sm font-semibold mb-1">Pronto para Calcular?</h3>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="w-5 h-5 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center cursor-help transition-colors">
+                                  <HelpCircle className="w-3 h-3 text-white" />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="bg-[#172133] border-[#172133] shadow-xl max-w-sm">
+                                <div className="p-2">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-5 h-5 bg-white rounded-lg flex items-center justify-center">
+                                      <CheckCircle className="w-3 h-3 text-[#172133]" />
+                                    </div>
+                                    <h4 className="text-xs font-semibold text-white">Dicas</h4>
+                                  </div>
+                                  <div className="text-xs text-white space-y-1">
+                                    <p>• Use dados históricos de pelo menos 12 meses</p>
+                                    <p>• Datas atípicas são opcionais</p>
+                                    <p>• Máximo 24 meses de previsão</p>
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                        <p className="text-white/80 text-xs">Clique para iniciar o processamento</p>
                       </div>
-                    </Button>
-                  </div>
-
-                  {/* Info Panel - Formato do Arquivo de Vendas */}
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-5 h-5 bg-blue-500 rounded-lg flex items-center justify-center">
-                        <AlertTriangle className="w-3 h-3 text-white" />
-                      </div>
-                      <h4 className="text-xs font-semibold text-slate-800">Formato do Arquivo de Vendas</h4>
-                    </div>
-                    <div className="text-xs text-slate-600 space-y-1">
-                      <p>• Formato: CSV</p>
-                      <p>• Separador: ponto e vírgula (;)</p>
-                      <p>• Colunas: Data; SKU; Familia; Vendas</p>
-                      <p>• Data: mm/aaaa</p>
-                    </div>
-                  </div>
-
-
-
-                  <div className="bg-gradient-to-br from-red-50 to-rose-50 rounded-xl p-4 border border-red-100">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-5 h-5 bg-red-500 rounded-lg flex items-center justify-center">
-                        <CheckCircle className="w-3 h-3 text-white" />
-                      </div>
-                      <h4 className="text-xs font-semibold text-slate-800">Dicas</h4>
-                    </div>
-                    <div className="text-xs text-slate-600 space-y-1">
-                      <p>• Use dados históricos de pelo menos 12 meses</p>
-                      <p>• Datas atípicas são opcionais</p>
-                      <p>• Máximo 24 meses de previsão</p>
+                      <Button
+                        type="submit"
+                        disabled={isPending || !selectedFile}
+                        size="lg"
+                        className="w-full bg-[#172133] hover:bg-[#0f1a2a] text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none"
+                      >
+                        <div className="flex items-center justify-center gap-2">
+                          <Calculator className="h-4 w-4" />
+                          <span className="text-sm">{isPending ? "Calculando..." : "Calcular Previsão"}</span>
+                          {!isPending && <ArrowRight className="h-3 w-3" />}
+                        </div>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -891,26 +1145,7 @@ export default function DemandForecastPage() {
         </div>
       </main>
 
-      {/* Modern Footer */}
-      <footer className="flex-shrink-0 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-t border-slate-700">
-        <div className="container mx-auto px-6 py-3">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                <BarChart3 className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <p className="text-white font-semibold text-sm">Sistema de Previsão de Demanda</p>
-                <p className="text-slate-400 text-xs">Tecnologia avançada para análise preditiva</p>
-              </div>
-            </div>
-            <div className="text-slate-400 text-xs text-center lg:text-right">
-              <p>© 2025 Todos os direitos reservados.</p>
-              <p className="text-xs mt-1">Desenvolvido com tecnologia de ponta</p>
-            </div>
-          </div>
-        </div>
-      </footer>
+
 
       {/* Compact Results Popup */}
       {showResultPopup && state && (
@@ -998,51 +1233,86 @@ export default function DemandForecastPage() {
                     </div>
                   </div>
                   
-                  {/* Download Section */}
-                  {state.downloadUrl && (
-                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4 text-center">
-                      <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mx-auto mb-2">
-                        <FileText className="w-4 h-4 text-white" />
+                  {/* Período de Análise */}
+                  {state.resultados && state.resultados.length > 0 && (
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 bg-blue-500 rounded-lg flex items-center justify-center">
+                          <Calendar className="w-4 h-4 text-white" />
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-800">Período Análise</h3>
                       </div>
-                      <h3 className="text-sm font-semibold text-slate-800 mb-2">Exportação e Salvamento</h3>
-                      <p className="text-sm text-slate-600 mb-3">Ir para análise de dados para revisar e salvar</p>
-                      {/* Botão para exportar planilha de resultados */}
-                      <Button
-                        onClick={() => {
-                          // Salvar os dados do cálculo no sessionStorage primeiro
-                          if (state.resultados && state.dataCalculo) {
-                            const dadosCalculo = {
-                              resultados: state.resultados,
-                              dataCalculo: state.dataCalculo,
-                              downloadUrl: state.downloadUrl,
-                              filename: state.filename
+                      <div className="mt-3 text-xs text-slate-600">
+                        <p>Período: {fieldValues.dataInicio?.replace('/', '/')} até {fieldValues.dataFim?.replace('/', '/')}</p>
+                        <p>Previsão: {fieldValues.diasPrevisao} meses</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Ações */}
+                  {state.downloadUrl && (
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 bg-green-500 rounded-lg flex items-center justify-center">
+                          <CheckCircle className="w-4 h-4 text-white" />
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-800">Ações Disponíveis</h3>
+                      </div>
+                      <p className="text-sm text-slate-600 mb-4">Escolha uma das opções abaixo:</p>
+                      
+                      <div className="flex flex-col gap-3">
+                        {/* Botão Exportar Previsão */}
+                        <Button
+                          onClick={() => {
+                            // Apenas exportar planilha de resultados, sem navegação
+                            handleExportResults()
+                          }}
+                          className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium text-sm rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg"
+                        >
+                          <Download className="w-4 h-4" />
+                          Exportar Previsão
+                        </Button>
+                        
+                        {/* Botão Imputar na Análise */}
+                        <Button
+                          onClick={() => {
+                            // Salvar os dados do cálculo no sessionStorage
+                            if (state.resultados && state.dataCalculo) {
+                              const dadosCalculo = {
+                                resultados: state.resultados,
+                                dataCalculo: state.dataCalculo,
+                                downloadUrl: state.downloadUrl,
+                                filename: state.filename
+                              }
+                              sessionStorage.setItem('dadosCalculo', JSON.stringify(dadosCalculo))
+                              
+                              // Processar resultados para criar mapeamento SKU -> valor calculado
+                              const calculationResults: Record<string, number> = {}
+                              
+                              if (Array.isArray(state.resultados)) {
+                                state.resultados.forEach((item: any) => {
+                                  if (item.sku && typeof item.media === 'number') {
+                                    calculationResults[item.sku] = item.media
+                                  }
+                                })
+                              }
+                              
+                              // Salvar mapeamento de resultados de cálculo
+                              sessionStorage.setItem('calculationResults', JSON.stringify(calculationResults))
+                              console.log('💾 Resultados de cálculo salvos:', Object.keys(calculationResults).length, 'SKUs')
                             }
-                            sessionStorage.setItem('dadosCalculo', JSON.stringify(dadosCalculo))
                             
-                            // Processar resultados para criar mapeamento SKU -> valor calculado
-                            const calculationResults: Record<string, number> = {}
-                            
-                            if (Array.isArray(state.resultados)) {
-                              state.resultados.forEach((item: any) => {
-                                if (item.sku && typeof item.media === 'number') {
-                                  calculationResults[item.sku] = item.media
-                                }
-                              })
-                            }
-                            
-                            // Salvar mapeamento de resultados de cálculo
-                            sessionStorage.setItem('calculationResults', JSON.stringify(calculationResults))
-                            console.log('💾 Resultados de cálculo salvos:', Object.keys(calculationResults).length, 'SKUs')
-                          }
-                          
-                          // Exportar planilha de resultados
-                          handleExportResults()
-                        }}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium text-sm rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg"
-                      >
-                        <Download className="w-4 h-4" />
-                        Baixar Planilha de Resultados
-                      </Button>
+                            // Fechar popup e navegar para análise
+                            setShowResultPopup(false)
+                            router.push('/analise-dados')
+                          }}
+                          variant="outline"
+                          className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 border-2 border-green-600 text-green-700 font-medium text-sm rounded-lg hover:bg-green-50 transition-all duration-300"
+                        >
+                          <BarChart3 className="w-4 h-4" />
+                          Imputar na Análise
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1077,6 +1347,7 @@ export default function DemandForecastPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
