@@ -11,6 +11,10 @@ Este sistema é uma aplicação web desenvolvida com Next.js para calcular e ger
 A página principal (`app/page.tsx`) oferece uma interface para:
 
 - Upload de arquivos CSV contendo dados históricos de vendas
+- Interface aprimorada para upload de arquivos com:
+  - Botão de input com ícone (Upload) que aparece apenas quando arquivo é anexado
+  - Botão de remoção (X) para excluir arquivos anexados
+  - Feedback visual melhorado para arquivos selecionados
 - Definição de parâmetros para o cálculo de previsão:
   - Período de previsão (data início e fim)
   - Dias de previsão
@@ -34,8 +38,31 @@ A página de análise de dados (`app/analise-dados/page.tsx`) permite:
 - Visualização detalhada dos dados de previsão
 - Filtragem e ordenação por diferentes critérios
 - Edição de dados diretamente na interface
-- Exportação de dados para Excel
+- Exportação de dados para Excel com popup de progresso modernizado
+- Atualização em lote no Supabase com indicador de progresso em tempo real
 - Análise comparativa entre diferentes períodos
+- Popups de confirmação com design moderno e responsivo
+
+## Melhorias de Interface e Experiência do Usuário
+
+### Popups Modernizados
+
+- **Popup de Progresso**: Interface moderna para acompanhamento em tempo real do processo de exportação e atualização
+  - Barra de progresso com percentual
+  - Indicação visual do status atual
+  - Animações suaves para feedback visual
+  - Cores e estilos consistentes com a identidade visual do projeto
+
+- **Popup de Confirmação**: Interface simplificada e moderna para confirmação de operações
+  - Design minimalista com cores contextuais (verde para sucesso, vermelho para erro)
+  - Botão "Entendi" para confirmação
+  - Transições e animações aprimoradas
+
+### Melhorias de Upload
+
+- **Botão de Input com Ícone**: Permite selecionar novo arquivo sem remover o atual
+- **Feedback Visual**: Indicação clara de arquivos selecionados
+- **Interação Intuitiva**: Botões com ícones para ações comuns (upload, remoção)
 
 ## Arquitetura Técnica
 
@@ -45,6 +72,7 @@ A página de análise de dados (`app/analise-dados/page.tsx`) permite:
 - **UI Components**: Biblioteca de componentes personalizados baseada em Radix UI
 - **Estilização**: Tailwind CSS
 - **Gerenciamento de Estado**: React Hooks (useState, useEffect, useActionState)
+- **Feedback Visual**: Popups interativos e indicadores de progresso
 
 ### Backend
 
@@ -82,6 +110,10 @@ O sistema utiliza o Supabase como backend, com as seguintes características:
 - Row Level Security (RLS) configurado para controle de acesso
 - Políticas de acesso definidas para operações CRUD
 - Autenticação de usuários para acesso seguro aos dados
+- **Atualização em Lote**: Processamento otimizado para grandes volumes de dados
+  - Progresso em tempo real durante atualizações
+  - Tratamento de erros robusto
+  - Feedback visual durante operações de longa duração
 
 ## Como Utilizar
 

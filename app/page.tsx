@@ -561,9 +561,9 @@ export default function DemandForecastPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   
                   {/* Superior Esquerdo - Upload Files */}
-                  <div className="space-y-4">
+                  <div className="bg-gradient-to-br from-[#1E8AA3]/10 to-[#39B6CA]/15 rounded-xl p-4 border border-[#39B6CA]/20 h-[280px] flex flex-col space-y-4">
                     {/* Upload Section - Arquivo de Média */}
-                    <div className="bg-gradient-to-br from-[#1E8AA3]/10 to-[#39B6CA]/15 rounded-xl p-3 border border-[#39B6CA]/20 h-[280px] flex flex-col">
+                    <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-6 h-6 bg-[#39B6CA] rounded-lg flex items-center justify-center">
                           <FileText className="w-4 h-4 text-white" />
@@ -574,8 +574,8 @@ export default function DemandForecastPage() {
                         <TooltipProvider>
                            <Tooltip>
                              <TooltipTrigger asChild>
-                               <div className="w-5 h-5 bg-[#39B6CA]/20 hover:bg-[#39B6CA]/30 rounded-full flex items-center justify-center cursor-help transition-colors">
-                                 <HelpCircle className="w-3 h-3 text-[#39B6CA]" />
+                               <div className="w-6 h-6 bg-[#39B6CA]/20 hover:bg-[#39B6CA]/30 rounded-full flex items-center justify-center cursor-help transition-colors">
+                                 <HelpCircle className="w-4 h-4 text-[#39B6CA]" />
                                </div>
                              </TooltipTrigger>
                              <TooltipContent side="bottom" className="bg-[#172133] border-[#172133] shadow-xl max-w-sm">
@@ -609,8 +609,7 @@ export default function DemandForecastPage() {
                            </Tooltip>
                          </TooltipProvider>
                       </div>
-                      <div className="flex-1 flex flex-col justify-center">
-                        <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-2">
                         <Input
                           id="mediaFile"
                           name="mediaFile"
@@ -620,16 +619,28 @@ export default function DemandForecastPage() {
                           onChange={handleMediaFileChange}
                         />
                         {selectedMediaFile && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={removeMediaFile}
-                            className="h-9 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                            title="Remover arquivo"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => document.getElementById('mediaFile')?.click()}
+                              className="h-9 px-2 text-[#39B6CA] hover:text-[#1E8AA3] hover:bg-[#39B6CA]/10 border-[#39B6CA]/30"
+                              title="Selecionar outro arquivo"
+                            >
+                              <Upload className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={removeMediaFile}
+                              className="h-9 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                              title="Remover arquivo"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </>
                         )}
                       </div>
                       {selectedMediaFile && (
@@ -640,11 +651,10 @@ export default function DemandForecastPage() {
                           </p>
                         </div>
                       )}
-                      </div>
                     </div>
 
                     {/* Upload Section - Histórico de Vendas */}
-                  <div className="bg-gradient-to-br from-[#1E8AA3]/10 to-[#39B6CA]/15 rounded-xl p-3 border border-[#39B6CA]/20 h-[280px] flex flex-col">
+                    <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-6 h-6 bg-[#39B6CA] rounded-lg flex items-center justify-center">
                         <FileText className="w-4 h-4 text-white" />
@@ -655,8 +665,8 @@ export default function DemandForecastPage() {
                       <TooltipProvider>
                          <Tooltip>
                            <TooltipTrigger asChild>
-                             <div className="w-5 h-5 bg-[#39B6CA]/20 hover:bg-[#39B6CA]/30 rounded-full flex items-center justify-center cursor-help transition-colors">
-                               <HelpCircle className="w-3 h-3 text-[#39B6CA]" />
+                             <div className="w-6 h-6 bg-[#39B6CA]/20 hover:bg-[#39B6CA]/30 rounded-full flex items-center justify-center cursor-help transition-colors">
+                               <HelpCircle className="w-4 h-4 text-[#39B6CA]" />
                              </div>
                            </TooltipTrigger>
                            <TooltipContent side="bottom" className="bg-[#172133] border-[#172133] shadow-xl max-w-sm">
@@ -686,8 +696,7 @@ export default function DemandForecastPage() {
                          </Tooltip>
                        </TooltipProvider>
                     </div>
-                    <div className="flex-1 flex flex-col justify-center">
-                      <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2">
                       <Input
                         id="csvFile"
                         name="csvFile"
@@ -720,10 +729,6 @@ export default function DemandForecastPage() {
                     )}
                     </div>
                   </div>
-
-
-
-                </div>
 
                   {/* Superior Central - Período de Análise */}
                   <div className="space-y-4">
@@ -1067,39 +1072,48 @@ export default function DemandForecastPage() {
                 </div>
                 </div>
                 
-                {/* Bottom Row - Calculate Button with proper spacing */}
-                <div className="flex justify-center pt-4">
+                {/* Bottom Row - Calculate Button with increased spacing */}
+                <div className="flex justify-center mt-60">
                   <div className="w-full max-w-md">
-                    <div className="bg-gradient-to-br from-[#1E8AA3] to-[#39B6CA] rounded-xl p-4">
-                      <div className="text-center mb-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <h3 className="text-white text-sm font-semibold mb-1">Pronto para Calcular?</h3>
+                    <div className="bg-gradient-to-br from-[#1E8AA3] to-[#39B6CA] rounded-xl p-7">
+                      <div className="text-center mb-5">
+                        <div className="flex items-center justify-center gap-3 mb-2">
+                          <h3 className="text-white text-lg font-semibold">Pronto para Calcular?</h3>
                           <TooltipProvider>
                             <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="w-5 h-5 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center cursor-help transition-colors">
-                                  <HelpCircle className="w-3 h-3 text-white" />
+                            <TooltipTrigger asChild>
+                                <div className="w-6 h-6 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center cursor-help transition-colors">
+                                  <HelpCircle className="w-4 h-4 text-white" />
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="bg-[#172133] border-[#172133] shadow-xl max-w-sm">
                                 <div className="p-2">
                                   <div className="flex items-center gap-2 mb-3">
-                                    <div className="w-5 h-5 bg-white rounded-lg flex items-center justify-center">
-                                      <CheckCircle className="w-3 h-3 text-[#172133]" />
+                                    <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center">
+                                      <CheckCircle className="w-4 h-4 text-[#172133]" />
                                     </div>
-                                    <h4 className="text-xs font-semibold text-white">Dicas</h4>
+                                    <h4 className="font-semibold text-white">Dicas</h4>
                                   </div>
-                                  <div className="text-xs text-white space-y-1">
-                                    <p>• Use dados históricos de pelo menos 12 meses</p>
-                                    <p>• Datas atípicas são opcionais</p>
-                                    <p>• Máximo 24 meses de previsão</p>
+                                  <div className="space-y-2 text-xs text-white">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-1 h-1 bg-white rounded-full"></div>
+                                      <span><strong>Dados históricos:</strong> pelo menos 12 meses</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-1 h-1 bg-white rounded-full"></div>
+                                      <span><strong>Datas atípicas:</strong> opcionais</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-1 h-1 bg-white rounded-full"></div>
+                                      <span><strong>Previsão:</strong> máximo 24 meses</span>
+                                    </div>
                                   </div>
                                 </div>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </div>
-                        <p className="text-white/80 text-xs">Clique para iniciar o processamento</p>
+                        <p className="text-white/80 text-sm">Clique para iniciar o processamento</p>
                       </div>
                       <Button
                         type="submit"

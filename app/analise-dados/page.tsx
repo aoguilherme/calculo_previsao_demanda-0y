@@ -52,6 +52,8 @@ export default function AnaliseDadosPage() {
   const [totalSkus, setTotalSkus] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
   const [saveProgress, setSaveProgress] = useState('')
+  const [showProgressPopup, setShowProgressPopup] = useState(false)
+  const [progressState, setProgressState] = useState<{current: number, total: number, currentSku: string, message: string} | null>(null)
   const [showResultPopup, setShowResultPopup] = useState(false)
   const [resultPopupState, setResultPopupState] = useState<{success: boolean, message: string} | null>(null)
   
@@ -298,49 +300,128 @@ export default function AnaliseDadosPage() {
   // Função para atualizar médias no Supabase e exportar Excel
   const handleSaveAndExport = async () => {
     setIsSaving(true)
-    setSaveProgress('Atualizando médias no Supabase...')
     setShowResultPopup(false)
     setResultPopupState(null)
+    setShowProgressPopup(true)
+    
     try {
-      // 1. Atualizar a coluna media_prevista com os valores de calculo_realizado no Supabase
+      // 1. Primeiro, gerar planilha Excel com TODOS os dados da tabela (inclusive os não visíveis)
+      setProgressState({current: 0, total: 100, currentSku: '', message: 'Gerando planilha Excel...'})
+      const wb = XLSX.utils.book_new()
+      
+      // Usar dadosProcessados que contém TODOS os dados filtrados e ordenados
+      const wsData = dadosProcessados.map(item => ({
+        'Código Item': item.sku,
+        'Família': item.fml_item || '-',
+        'Média Atual': item.media_prevista || 0,
+        'Data Implantação': item.dt_implant ? item.dt_implant.split('T')[0].split('-').reverse().join('/') : '-',
+        'Cálculo Realizado': item.calculo_realizado || item.media_prevista || 0,
+        'Diferença (%)': item.diferencaCalculada ? Number(item.diferencaCalculada.toFixed(2)) : 0
+      }))
+      
+      const ws = XLSX.utils.json_to_sheet(wsData)
+      XLSX.utils.book_append_sheet(wb, ws, 'Análise de Dados')
+      
+      const now = new Date()
+      const pad = (n: number) => n.toString().padStart(2, '0')
+      const fileName = `analise_dados_${pad(now.getDate())}-${pad(now.getMonth()+1)}-${now.getFullYear()}_${pad(now.getHours())}h${pad(now.getMinutes())}.xlsx`
+      XLSX.writeFile(wb, fileName)
+      
+      setProgressState({current: 10, total: 100, currentSku: '', message: 'Excel gerado com sucesso!'})
+      
+      // 2. Atualizar Supabase com progresso em tempo real
       const supabase = createClient()
-      for (const item of dadosProcessados) {
-        if (item.sku && typeof item.calculo_realizado === 'number') {
-          await supabase
-            .from('previsoes_demanda')
-            .update({ media_prevista: item.calculo_realizado })
-            .eq('sku', item.sku)
+      const itemsToUpdate = dadosProcessados.filter(item => 
+        item.sku && typeof item.calculo_realizado === 'number'
+      )
+      
+      const totalItems = itemsToUpdate.length
+      let updatedCount = 0
+      let errorCount = 0
+      const errors: string[] = []
+      
+      setProgressState({current: 15, total: 100, currentSku: '', message: `Iniciando atualização de ${totalItems} SKUs no Supabase...`})
+      
+      // Processar em lotes para melhor performance
+      const BATCH_SIZE = 10
+      for (let i = 0; i < itemsToUpdate.length; i += BATCH_SIZE) {
+        const batch = itemsToUpdate.slice(i, i + BATCH_SIZE)
+        
+        // Processar lote em paralelo
+        const batchPromises = batch.map(async (item) => {
+          try {
+            const { error } = await supabase
+              .from('previsoes_demanda')
+              .update({ media_prevista: item.calculo_realizado })
+              .eq('sku', item.sku)
+            
+            if (error) {
+              throw error
+            }
+            
+            updatedCount++
+            const progressPercent = Math.round(15 + (updatedCount / totalItems) * 80) // 15% inicial + 80% para atualizações
+            setProgressState({
+              current: progressPercent, 
+              total: 100, 
+              currentSku: item.sku, 
+              message: `Atualizando SKU ${item.sku}...`
+            })
+            
+            return { success: true, sku: item.sku }
+          } catch (error) {
+            errorCount++
+            const errorMsg = `Erro ao atualizar SKU ${item.sku}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+            errors.push(errorMsg)
+            console.error(errorMsg)
+            return { success: false, sku: item.sku, error: errorMsg }
+          }
+        })
+        
+        await Promise.all(batchPromises)
+        
+        // Pequena pausa entre lotes para não sobrecarregar o servidor
+        if (i + BATCH_SIZE < itemsToUpdate.length) {
+          await new Promise(resolve => setTimeout(resolve, 100))
         }
       }
       
-      // 2. Gerar planilha Excel com as informações da tabela
-      setSaveProgress('Gerando planilha...')
-      const wb = XLSX.utils.book_new()
-      const wsData = dadosProcessados.map(item => ({
-        'Código Item': item.sku,
-        'Família': item.fml_item,
-        'Média Atual': item.media_prevista,
-        'Data Implant.': item.dt_implant ? item.dt_implant.split('T')[0].split('-').reverse().join('/') : '-',
-        'Cálculo Realizado': item.calculo_realizado,
-        'Diferença (%)': item.diferencaCalculada ? Number(item.diferencaCalculada.toFixed(2)) : 0
-      }))
-      const ws = XLSX.utils.json_to_sheet(wsData)
-      XLSX.utils.book_append_sheet(wb, ws, 'media_final')
-      const now = new Date()
-      const pad = (n: number) => n.toString().padStart(2, '0')
-      const fileName = `media_final_${pad(now.getDate())}-${pad(now.getMonth()+1)}-${now.getFullYear()}.xlsx`
-      XLSX.writeFile(wb, fileName)
+      setProgressState({current: 95, total: 100, currentSku: '', message: 'Finalizando processo...'})
       
-      setSaveProgress('✅ Médias atualizadas e planilha gerada!')
-      setResultPopupState({success: true, message: 'Os valores de Cálculo Realizado foram salvos como novas médias no Supabase e a planilha foi gerada com sucesso.'})
-      setShowResultPopup(true)
-    } catch (e) {
-      setSaveProgress('❌ Erro durante o processo')
-      setResultPopupState({success: false, message: 'Ocorreu um erro durante o processo de exportação.'})
-      setShowResultPopup(true)
+      // Resultado final
+      if (errorCount === 0) {
+        setProgressState({current: 100, total: 100, currentSku: '', message: `✅ Atualização concluída com sucesso! ${updatedCount} SKUs atualizados.`})
+        setResultPopupState({
+          success: true, 
+          message: `Planilha Excel exportada com sucesso!\n\nAtualização do Supabase:\n• ${updatedCount} SKUs atualizados com sucesso\n• ${totalItems - updatedCount} SKUs sem alterações\n\nArquivo salvo: ${fileName}`
+        })
+      } else {
+        setProgressState({current: 100, total: 100, currentSku: '', message: `⚠️ Atualização concluída com ${errorCount} erros`})
+        setResultPopupState({
+          success: false,
+          message: `Planilha Excel exportada com sucesso!\n\nAtualização do Supabase:\n• ${updatedCount} SKUs atualizados\n• ${errorCount} SKUs com erro\n\nPrimeiros erros:\n${errors.slice(0, 3).join('\n')}${errors.length > 3 ? '\n...' : ''}`
+        })
+      }
+      
+      // Aguardar um pouco antes de mostrar o resultado final
+      setTimeout(() => {
+        setShowProgressPopup(false)
+        setShowResultPopup(true)
+      }, 1500)
+      
+    } catch (error) {
+      console.error('Erro durante o processo:', error)
+      setProgressState({current: 0, total: 100, currentSku: '', message: '❌ Erro durante o processo'})
+      setResultPopupState({
+        success: false, 
+        message: `Ocorreu um erro durante o processo de exportação:\n${error instanceof Error ? error.message : 'Erro desconhecido'}`
+      })
+      setTimeout(() => {
+        setShowProgressPopup(false)
+        setShowResultPopup(true)
+      }, 1500)
     } finally {
       setIsSaving(false)
-      setTimeout(() => setSaveProgress(''), 2000)
     }
   }
 
@@ -484,16 +565,7 @@ export default function AnaliseDadosPage() {
     setScrollTop(e.currentTarget.scrollTop)
   }, [])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Carregando dados...</p>
-        </div>
-      </div>
-    )
-  }
+  // Removido: tela de carregamento completa
 
   return (
     <div className="h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex overflow-hidden">
@@ -906,8 +978,19 @@ export default function AnaliseDadosPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      <tr style={{ height: virtualizedData.offsetY }}></tr>
-                      {virtualizedData.items.map((item) => {
+                      {loading ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-8">
+                            <div className="flex items-center justify-center gap-3">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                              <span className="text-slate-600">Carregando dados...</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        <>
+                          <tr style={{ height: virtualizedData.offsetY }}></tr>
+                          {virtualizedData.items.map((item) => {
                         const isCurrentYearDate = isCurrentYear(item.dt_implant)
                         return (
                           <TableRow 
@@ -993,6 +1076,8 @@ export default function AnaliseDadosPage() {
                           </TableRow>
                         )
                       })}
+                        </>
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -1008,41 +1093,101 @@ export default function AnaliseDadosPage() {
               </div>
             </div>
             
-            {/* Progress indicator para salvamento */}
-            {isSaving && saveProgress && (
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                  <span className="text-sm text-blue-700">{saveProgress}</span>
-                </div>
-              </div>
-            )}
+
           </CardContent>
           </Card>
           </div>
         </main>
       </div>
 
-      {/* Popup de resultado */}
+      {/* Popup de progresso moderno */}
+      {showProgressPopup && progressState && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-500">
+          <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-xl border border-white/20 w-[420px] overflow-hidden animate-in slide-in-from-bottom-6 duration-500 flex flex-col">
+            {/* Header moderno */}
+            <div className="px-6 py-5 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border-b border-blue-100/50">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center shadow-lg">
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent"></div>
+                  </div>
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-1">
+                    Processando Exportação
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Aguarde enquanto processamos seus dados
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Conteúdo do progresso */}
+            <div className="p-6">
+              <div className="space-y-6">
+                {/* Barra de progresso moderna */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">Progresso</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                        {progressState.current}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-700 ease-out relative overflow-hidden"
+                        style={{ width: `${progressState.current}%` }}
+                      >
+                        <div className="absolute inset-0 bg-white/30 animate-pulse"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Status atual moderno */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-4 border border-blue-100/50">
+                  <div className="flex items-start gap-3">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse mt-2 flex-shrink-0"></div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-700 mb-1">Status Atual</p>
+                      <p className="text-sm text-gray-600 leading-relaxed">
+                        {progressState.message}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Popup de confirmação moderno */}
       {showResultPopup && resultPopupState && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
-          <div className="bg-white rounded-2xl shadow-2xl w-[400px] max-h-[85vh] overflow-hidden animate-in slide-in-from-bottom-4 duration-300 flex flex-col">
-            <div className={`px-4 py-3 flex-shrink-0 ${resultPopupState.success ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-red-500 to-rose-500'}`}> 
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-500">
+          <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-xl border border-white/20 w-[380px] overflow-hidden animate-in slide-in-from-bottom-6 duration-500">
+            {/* Header de confirmação */}
+            <div className={`px-6 py-5 ${resultPopupState.success ? 'bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-b border-green-100/50' : 'bg-gradient-to-r from-red-500/10 to-rose-500/10 border-b border-red-100/50'}`}>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${resultPopupState.success ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-red-500 to-rose-500'}`}>
                     {resultPopupState.success ? (
-                      <BarChart3 className="w-5 h-5 text-white" />
+                      <BarChart3 className="w-6 h-6 text-white" />
                     ) : (
-                      <X className="w-5 h-5 text-white" />
+                      <X className="w-6 h-6 text-white" />
                     )}
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-white">
-                      {resultPopupState.success ? 'Exportação Concluída!' : 'Erro na Exportação'}
+                    <h2 className="text-xl font-semibold text-gray-800">
+                      {resultPopupState.success ? 'Concluído!' : 'Erro'}
                     </h2>
-                    <p className="text-white/80 text-xs">
-                      {resultPopupState.message}
+                    <p className="text-sm text-gray-500">
+                      {resultPopupState.success ? 'Operação realizada com sucesso' : 'Ocorreu um problema'}
                     </p>
                   </div>
                 </div>
@@ -1050,9 +1195,28 @@ export default function AnaliseDadosPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowResultPopup(false)}
-                  className="text-white/80 hover:text-white hover:bg-white/20 rounded-lg h-8 w-8 p-0"
+                  className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl h-8 w-8 p-0 transition-colors"
                 >
                   <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            
+            {/* Conteúdo da confirmação */}
+            <div className="p-6">
+              <div className={`rounded-2xl p-4 ${resultPopupState.success ? 'bg-gradient-to-r from-green-50 to-emerald-50 border border-green-100/50' : 'bg-gradient-to-r from-red-50 to-rose-50 border border-red-100/50'}`}>
+                <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
+                  {resultPopupState.message}
+                </p>
+              </div>
+              
+              {/* Botão de ação */}
+              <div className="mt-6 flex justify-end">
+                <Button
+                  onClick={() => setShowResultPopup(false)}
+                  className={`px-6 py-2 rounded-xl font-medium transition-all duration-200 ${resultPopupState.success ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg hover:shadow-xl' : 'bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white shadow-lg hover:shadow-xl'}`}
+                >
+                  Entendi
                 </Button>
               </div>
             </div>
