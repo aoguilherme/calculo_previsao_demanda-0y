@@ -575,14 +575,14 @@ export default function AnaliseDadosPage() {
           <Button
             variant="outline"
             size="sm"
-            className="fixed top-4 left-4 z-50 lg:hidden bg-white/95 border-[#39B6CA]/30 text-[#39B6CA] hover:bg-[#39B6CA] hover:text-white shadow-lg backdrop-blur-sm transition-all duration-300"
+            className="fixed top-4 left-4 z-50 lg:hidden bg-white/95 border-[#176B87]/30 text-[#176B87] hover:bg-[#176B87] hover:text-white shadow-lg backdrop-blur-sm transition-all duration-300"
           >
             <Menu className="h-4 w-4" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-80 p-0 bg-white border-r border-gray-100 shadow-2xl">
+        <SheetContent side="left" className="w-80 p-0 bg-white border-r border-gray-100 shadow-2xl drop-shadow-2xl">
           <div className="flex flex-col h-full">
-            <div className="bg-gradient-to-br from-[#39B6CA] to-[#2A9BB8] p-8 shadow-lg">
+            <div className="bg-gradient-to-br from-[#176B87] to-[#145A6B] p-8 shadow-lg">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm">
                   <BarChart3 className="w-7 h-7 text-white" />
@@ -596,14 +596,14 @@ export default function AnaliseDadosPage() {
             <nav className="flex-1 p-8 space-y-4">
               <Button
                 variant="ghost"
-                className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#39B6CA]/10 hover:text-[#39B6CA] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+                className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#176B87]/10 hover:text-[#176B87] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
                 onClick={() => {
                   router.push('/')
                   setSidebarOpen(false)
                 }}
               >
-                <div className="w-10 h-10 bg-[#39B6CA]/10 rounded-xl flex items-center justify-center mr-4">
-                  <Calculator className="h-5 w-5 text-[#39B6CA]" />
+                <div className="w-10 h-10 bg-[#176B87]/10 rounded-xl flex items-center justify-center mr-4">
+                  <Calculator className="h-5 w-5 text-[#176B87]" />
                 </div>
                 <div className="text-left">
                   <div className="font-bold text-base">Cálculo</div>
@@ -612,7 +612,7 @@ export default function AnaliseDadosPage() {
               </Button>
               <Button
                 variant="ghost"
-                className="w-full justify-start h-14 bg-gradient-to-r from-[#39B6CA] to-[#2A9BB8] text-white hover:from-[#2A9BB8] hover:to-[#1E8AA3] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+                className="w-full justify-start h-14 bg-gradient-to-r from-[#176B87] to-[#145A6B] text-white hover:from-[#145A6B] hover:to-[#124C5F] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
                 onClick={() => {
                   router.push('/analise-dados')
                   setSidebarOpen(false)
@@ -638,8 +638,8 @@ export default function AnaliseDadosPage() {
       </Sheet>
 
       {/* Menu Lateral Desktop */}
-      <div className="hidden lg:flex lg:w-80 lg:flex-col lg:bg-white lg:border-r lg:border-gray-100 lg:shadow-2xl">
-        <div className="bg-gradient-to-br from-[#39B6CA] to-[#2A9BB8] p-8 shadow-lg">
+      <div className="hidden lg:flex lg:w-80 lg:flex-col lg:bg-white lg:border-r lg:border-gray-100 lg:shadow-2xl lg:drop-shadow-2xl">
+        <div className="bg-gradient-to-br from-[#176B87] to-[#145A6B] p-8 shadow-lg">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm">
               <BarChart3 className="w-7 h-7 text-white" />
@@ -653,11 +653,11 @@ export default function AnaliseDadosPage() {
         <nav className="flex-1 p-8 space-y-4">
           <Button
             variant="ghost"
-            className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#39B6CA]/10 hover:text-[#39B6CA] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+            className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#176B87]/10 hover:text-[#176B87] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
             onClick={() => router.push('/')}
           >
-            <div className="w-10 h-10 bg-[#39B6CA]/10 rounded-xl flex items-center justify-center mr-4">
-              <Calculator className="h-5 w-5 text-[#39B6CA]" />
+            <div className="w-10 h-10 bg-[#176B87]/10 rounded-xl flex items-center justify-center mr-4">
+              <Calculator className="h-5 w-5 text-[#176B87]" />
             </div>
             <div className="text-left">
               <div className="font-bold text-base">Cálculo</div>
@@ -666,7 +666,7 @@ export default function AnaliseDadosPage() {
           </Button>
           <Button
             variant="ghost"
-            className="w-full justify-start h-14 bg-gradient-to-r from-[#39B6CA] to-[#2A9BB8] text-white hover:from-[#2A9BB8] hover:to-[#1E8AA3] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
+            className="w-full justify-start h-14 bg-gradient-to-r from-[#176B87] to-[#145A6B] text-white hover:from-[#145A6B] hover:to-[#124C5F] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
             onClick={() => router.push('/analise-dados')}
           >
             <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-4">
@@ -691,7 +691,7 @@ export default function AnaliseDadosPage() {
       <Toaster />
       
         {/* Header */}
-        <header className="bg-[#32ACC1] shadow-xl flex-shrink-0">
+        <header className="bg-[#176B87] shadow-xl flex-shrink-0">
           <div className="container mx-auto px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -713,10 +713,10 @@ export default function AnaliseDadosPage() {
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto bg-gradient-to-br from-[#39B6CA]/5 via-[#2A9BB8]/10 to-[#1E8AA3]/15">
+        <main className="flex-1 overflow-auto bg-gradient-to-br from-[#176B87]/5 via-[#145A6B]/10 to-[#124C5F]/15">
           <div className="container mx-auto px-4 py-6">
         <Card className="bg-white/90 backdrop-blur-sm shadow-xl border-0 rounded-2xl">
-          <CardHeader className="bg-gradient-to-r from-[#1E8AA3] to-[#39B6CA] text-white rounded-t-2xl p-2">
+          <CardHeader className="bg-gradient-to-r from-[#124C5F] to-[#176B87] text-white rounded-t-2xl p-2">
             {/* Seção de Filtros Compacta */}
             <div className="p-2">
               <div className="flex items-center gap-2 mb-2">
