@@ -756,7 +756,7 @@ export default function DemandForecastPage() {
                             Anexar Arquivos
                           </span>
                           <span className="text-sm text-[#278190]/70 mt-1">
-                            Clique para adicionar arquivos CSV
+                            Clique para adicionar os arquivos CSV
                           </span>
                         </button>
                       </div>
@@ -977,7 +977,7 @@ export default function DemandForecastPage() {
                               Período de Análise
                             </span>
                             <span className="text-sm text-[#278190]/70 mt-1">
-                              Clique para configurar datas
+                              Clique para configurar as Datas de Análise
                             </span>
                           </button>
                         </div>
@@ -1187,10 +1187,10 @@ export default function DemandForecastPage() {
                             <AlertTriangle className="w-8 h-8 text-white" />
                           </div>
                           <span className="text-lg font-semibold text-[#278190] group-hover:text-[#1F6B73] transition-colors">
-                            Análise de Datas
+                            Datas Atípicas
                           </span>
                           <span className="text-sm text-[#278190]/70 mt-1">
-                            Clique para configurar datas atípicas
+                            Clique para configurar as Datas Atípicas
                           </span>
                         </button>
                       </div>
