@@ -844,7 +844,7 @@ export default function AnaliseDadosPage() {
           </CardHeader>
           
           <CardContent className="p-6">
-            <div className="rounded-lg border border-slate-200 h-[640px] flex flex-col">
+            <div className="rounded-lg border border-slate-200 h-[637px] flex flex-col">
               <div className="sticky top-0 bg-[#39ca96] z-50 border-b-2 border-[#39ca96]">
                 <Table>
                   <TableHeader>
