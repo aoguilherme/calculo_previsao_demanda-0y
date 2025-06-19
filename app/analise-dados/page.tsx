@@ -325,7 +325,22 @@ export default function AnaliseDadosPage() {
       const now = new Date()
       const pad = (n: number) => n.toString().padStart(2, '0')
       const fileName = `analise_dados_${pad(now.getDate())}-${pad(now.getMonth()+1)}-${now.getFullYear()}_${pad(now.getHours())}h${pad(now.getMinutes())}.xlsx`
-      XLSX.writeFile(wb, fileName)
+      
+      // Gerar arquivo usando buffer e blob para evitar corrupção
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      
+      // Criar link para download
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      // Limpar URL do objeto
+      URL.revokeObjectURL(url)
       
       setProgressState({current: 10, total: 100, currentSku: '', message: 'Excel gerado com sucesso!'})
       
