@@ -453,7 +453,7 @@ export default function AnaliseDadosPage() {
     return dados.map(item => ({
       ...item,
       diferencaCalculada: item.calculo_realizado 
-        ? ((item.calculo_realizado - item.media_prevista) / item.media_prevista) * 100 
+        ? (item.media_prevista === 0 ? 0 : ((item.calculo_realizado - item.media_prevista) / item.media_prevista) * 100)
         : 0
     }))
   }, [dados])
