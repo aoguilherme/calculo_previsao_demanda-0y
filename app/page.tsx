@@ -272,6 +272,39 @@ export default function DemandForecastPage() {
     setFieldValues((prev) => ({ ...prev, [field]: defaultValue }))
   }
 
+  // Função para resetar todos os campos e anexos
+  const resetAllFields = () => {
+    // Resetar valores dos campos
+    setFieldValues(defaultValues)
+    
+    // Resetar arquivos anexados
+    setSelectedFile(null)
+    setSelectedMediaFile(null)
+    
+    // Resetar dados CSV processados
+    setCsvData([])
+    
+    // Resetar datas atípicas
+    setDatasAtipicas([])
+    setNovaDataAtipica({ data: '', descricao: '' })
+    setDataAtipicaError('')
+    
+    // NÃO resetar estados de exibição para manter seções abertas
+    // setShowAttachments(false)
+    // setShowAnalysisPeriod(false)
+    // setShowAtypicalDates(false)
+    
+    // Resetar mensagens de importação
+    setImportMessage('')
+    setImportSuccessData(null)
+    
+    // Limpar inputs de arquivo
+    const fileInputs = document.querySelectorAll('input[type="file"]') as NodeListOf<HTMLInputElement>
+    fileInputs.forEach(input => {
+      input.value = ''
+    })
+  }
+
   const isFieldEdited = (field: string) => {
     const currentValue = fieldValues[field as keyof typeof fieldValues]
     // Para campos de data, verificar se é diferente de hoje
@@ -731,7 +764,7 @@ export default function DemandForecastPage() {
               <input type="hidden" name="datasAtipicas" value={JSON.stringify(datasAtipicas)} />
               
               {/* New Layout - Fixed Height Grid */}
-              <div className="flex-1 flex flex-col gap-6 overflow-hidden">
+              <div className="flex-1 flex flex-col gap-6 overflow-hidden relative">
                 
                 {/* Top Row - 3 Columns with standardized height */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1295,7 +1328,10 @@ export default function DemandForecastPage() {
                               <p className="text-xs text-red-700 font-medium">{dataAtipicaError}</p>
                             </div>
                             <button
-                              onClick={() => setDataAtipicaError('')}
+                              onClick={() => {
+                                setDataAtipicaError('')
+                                resetAllFields()
+                              }}
                               className="w-4 h-4 flex items-center justify-center hover:bg-red-200 rounded transition-colors"
                               title="Fechar"
                             >
@@ -1367,64 +1403,65 @@ export default function DemandForecastPage() {
                 </div>
                 </div>
                 
-                {/* Bottom Row - Calculate Button with increased spacing */}
-                <div className="flex justify-center mt-60">
-                  <div className="w-full max-w-md">
-                    <div className="bg-gradient-to-br from-[#176B87] to-[#145A6B] rounded-xl p-7">
-                      <div className="text-center mb-5">
-                        <div className="flex items-center justify-center gap-3 mb-2">
-                          <h3 className="text-white text-lg font-semibold">Pronto para Calcular?</h3>
-                          <TooltipProvider>
-                            <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div className="w-6 h-6 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center cursor-help transition-colors">
-                                  <HelpCircle className="w-4 h-4 text-white" />
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="bg-[#172133] border-[#172133] shadow-xl max-w-sm">
-                                <div className="p-2">
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center">
-                                      <CheckCircle className="w-4 h-4 text-[#172133]" />
-                                    </div>
-                                    <h4 className="font-semibold text-white">Dicas</h4>
+                {/* Bottom Row - Calculate Button - Fixed Position */}
+                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md z-10">
+                  <div className="bg-gradient-to-br from-[#176B87] to-[#145A6B] rounded-xl p-7">
+                    <div className="text-center mb-5">
+                      <div className="flex items-center justify-center gap-3 mb-2">
+                        <h3 className="text-white text-lg font-semibold">Pronto para Calcular?</h3>
+                        <TooltipProvider>
+                          <Tooltip>
+                          <TooltipTrigger asChild>
+                              <div className="w-6 h-6 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center cursor-help transition-colors">
+                                <HelpCircle className="w-4 h-4 text-white" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="bg-[#172133] border-[#172133] shadow-xl max-w-sm">
+                              <div className="p-2">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center">
+                                    <CheckCircle className="w-4 h-4 text-[#172133]" />
                                   </div>
-                                  <div className="space-y-2 text-xs text-white">
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-1 h-1 bg-white rounded-full"></div>
-                                      <span><strong>Dados históricos:</strong> pelo menos 12 meses</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-1 h-1 bg-white rounded-full"></div>
-                                      <span><strong>Datas atípicas:</strong> opcionais</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-1 h-1 bg-white rounded-full"></div>
-                                      <span><strong>Previsão:</strong> máximo 24 meses</span>
-                                    </div>
+                                  <h4 className="font-semibold text-white">Dicas</h4>
+                                </div>
+                                <div className="space-y-2 text-xs text-white">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-1 h-1 bg-white rounded-full"></div>
+                                    <span><strong>Dados históricos:</strong> pelo menos 12 meses</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-1 h-1 bg-white rounded-full"></div>
+                                    <span><strong>Datas atípicas:</strong> opcionais</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-1 h-1 bg-white rounded-full"></div>
+                                    <span><strong>Previsão:</strong> máximo 24 meses</span>
                                   </div>
                                 </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <p className="text-white/80 text-sm">Clique para iniciar o processamento</p>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
-                      <Button
-                        type="submit"
-                        disabled={isPending || !selectedFile}
-                        size="lg"
-                        className="w-full bg-[#2FA3BE] hover:bg-[#2891A8] text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none"
-                      >
-                        <div className="flex items-center justify-center gap-2">
-                          <Calculator className="h-4 w-4" />
-                          <span className="text-sm">{isPending ? "Calculando..." : "Calcular Previsão"}</span>
-                          {!isPending && <ArrowRight className="h-3 w-3" />}
-                        </div>
-                      </Button>
+                      <p className="text-white/80 text-sm">Clique para iniciar o processamento</p>
                     </div>
+                    <Button
+                      type="submit"
+                      disabled={isPending || !selectedFile}
+                      size="lg"
+                      className="w-full bg-[#2FA3BE] hover:bg-[#2891A8] text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none"
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <Calculator className="h-4 w-4" />
+                        <span className="text-sm">{isPending ? "Calculando..." : "Calcular Previsão"}</span>
+                        {!isPending && <ArrowRight className="h-3 w-3" />}
+                      </div>
+                    </Button>
                   </div>
                 </div>
+                
+                {/* Spacer to prevent content overlap with fixed button */}
+                <div className="h-40"></div>
               </div>
 
               {/* Campos hidden para enviar valores controlados */}
@@ -1487,7 +1524,10 @@ export default function DemandForecastPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowResultPopup(false)}
+                  onClick={() => {
+                    setShowResultPopup(false)
+                    resetAllFields()
+                  }}
                   className="text-white/80 hover:text-white hover:bg-white/20 rounded-lg h-8 w-8 p-0"
                 >
                   <X className="h-4 w-4" />
@@ -1612,8 +1652,9 @@ export default function DemandForecastPage() {
                             }
                             
                             // Fechar popup e navegar para análise
-                            setShowResultPopup(false)
-                            router.push('/analise-dados')
+                          setShowResultPopup(false)
+                          resetAllFields()
+                          router.push('/analise-dados')
                           }}
                           variant="outline"
                           className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 border-2 border-green-600 text-green-700 font-medium text-sm rounded-lg hover:bg-green-50 transition-all duration-300"
@@ -1694,7 +1735,10 @@ export default function DemandForecastPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowImportConfirmModal(false)}
+                  onClick={() => {
+                    setShowImportConfirmModal(false)
+                    resetAllFields()
+                  }}
                   className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50"
                 >
                   Cancelar
@@ -1728,7 +1772,10 @@ export default function DemandForecastPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowImportSuccessPopup(false)}
+                  onClick={() => {
+                    setShowImportSuccessPopup(false)
+                    resetAllFields()
+                  }}
                   className="text-white hover:bg-white/20 h-8 w-8 p-0"
                 >
                   <X className="h-4 w-4" />
@@ -1774,7 +1821,10 @@ export default function DemandForecastPage() {
 
               <div className="mt-6">
                 <Button
-                  onClick={() => setShowImportSuccessPopup(false)}
+                  onClick={() => {
+                    setShowImportSuccessPopup(false)
+                    resetAllFields()
+                  }}
                   className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-300"
                 >
                   Fechar
