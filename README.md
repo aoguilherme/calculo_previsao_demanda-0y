@@ -2,145 +2,254 @@
 
 ## Visão Geral
 
-Este sistema é uma aplicação web desenvolvida com Next.js para calcular e gerenciar previsões de demanda de produtos. A aplicação permite importar dados de vendas, processar esses dados utilizando algoritmos de previsão, e armazenar os resultados em um banco de dados Supabase para posterior análise e visualização.
+Este sistema é uma aplicação web moderna desenvolvida com **Next.js 15** e **React 19** para calcular e gerenciar previsões de demanda de produtos. A aplicação oferece uma interface intuitiva para importar dados de vendas, processar informações utilizando algoritmos avançados de previsão, e armazenar os resultados em um banco de dados Supabase para análise detalhada e visualização de dados.
+
+## Tecnologias Utilizadas
+
+- **Frontend**: Next.js 15.2.4, React 19, TypeScript 5
+- **UI/UX**: Tailwind CSS, Radix UI, Lucide React Icons
+- **Backend**: Supabase (PostgreSQL), Server Actions
+- **Processamento de Dados**: Algoritmos proprietários de previsão
+- **Exportação**: XLSX para relatórios Excel
+- **Gráficos**: Recharts para visualizações
+- **Formulários**: React Hook Form com Zod validation
+- **Temas**: Next Themes para modo escuro/claro
 
 ## Funcionalidades Principais
 
 ### 1. Cálculo de Previsão de Demanda
 
-A página principal (`app/page.tsx`) oferece uma interface para:
+A página principal oferece uma interface completa para:
 
-- Upload de arquivos CSV contendo dados históricos de vendas
-- Interface aprimorada para upload de arquivos com:
-  - Botão de input com ícone (Upload) que aparece apenas quando arquivo é anexado
-  - Botão de remoção (X) para excluir arquivos anexados
-  - Feedback visual melhorado para arquivos selecionados
-- Definição de parâmetros para o cálculo de previsão:
-  - Período de previsão (data início e fim)
-  - Dias de previsão
-  - Datas atípicas a serem consideradas
-- Processamento dos dados e cálculo da previsão de demanda
-- Visualização dos resultados e download em formato Excel
+- **Upload Inteligente de Dados**:
+  - Suporte a arquivos CSV com dados históricos de vendas
+  - Interface moderna com drag & drop
+  - Validação automática de formato e estrutura dos dados
+  - Feedback visual em tempo real durante o upload
 
-### 2. Dashboard de Análise
+- **Configuração Avançada de Parâmetros**:
+  - Período de previsão personalizável (data início e fim)
+  - Definição de dias de previsão
+  - Configuração de datas atípicas e eventos sazonais
+  - Ajustes de algoritmos de previsão
 
-A página de dashboard (`app/dashboard/page.tsx`) apresenta:
+- **Processamento e Resultados**:
+  - Algoritmos avançados de machine learning para previsão
+  - Categorização automática de SKUs por volume
+  - Cálculo de métricas de precisão e confiabilidade
+  - Exportação completa em Excel com múltiplas planilhas
+  - Visualização interativa dos resultados
 
-- Visão geral das previsões calculadas
-- Estatísticas como total de SKUs, média geral e data da última previsão
-- Busca e filtragem de SKUs específicos
-- Visualização de métricas importantes para tomada de decisão
+### 2. Dashboard Executivo
+
+O dashboard oferece uma visão estratégica completa:
+
+- **Métricas Principais**:
+  - Total de SKUs processados e analisados
+  - Média geral de previsões e tendências
+  - Data da última atualização e sincronização
+  - Indicadores de performance do sistema
+
+- **Visualizações Interativas**:
+  - Gráficos de tendências temporais
+  - Distribuição de categorias de produtos
+  - Análise de sazonalidade
+  - Comparativos período a período
+
+- **Ferramentas de Busca**:
+  - Busca avançada por SKU, categoria ou família
+  - Filtros dinâmicos por período e performance
+  - Ordenação por múltiplos critérios
 
 ### 3. Análise Detalhada de Dados
 
-A página de análise de dados (`app/analise-dados/page.tsx`) permite:
+Interface avançada para análise profunda:
 
-- Visualização detalhada dos dados de previsão
-- Filtragem e ordenação por diferentes critérios
-- Edição de dados diretamente na interface
-- Exportação de dados para Excel com popup de progresso modernizado
-- Atualização em lote no Supabase com indicador de progresso em tempo real
-- Análise comparativa entre diferentes períodos
-- Popups de confirmação com design moderno e responsivo
+- **Visualização Completa**:
+  - Tabelas interativas com paginação inteligente
+  - Edição inline de dados com validação
+  - Filtros avançados por múltiplos campos
+  - Ordenação dinâmica e personalizável
 
-## Melhorias de Interface e Experiência do Usuário
+- **Exportação e Sincronização**:
+  - Exportação para Excel com progresso em tempo real
+  - Atualização em lote otimizada para o Supabase
+  - Backup automático antes de modificações
+  - Histórico de alterações e auditoria
 
-### Popups Modernizados
+- **Análise Comparativa**:
+  - Comparação entre diferentes períodos
+  - Análise de desvios e variações
+  - Identificação de outliers e anomalias
+  - Relatórios de precisão dos algoritmos
 
-- **Popup de Progresso**: Interface moderna para acompanhamento em tempo real do processo de exportação e atualização
-  - Barra de progresso com percentual
-  - Indicação visual do status atual
-  - Animações suaves para feedback visual
-  - Cores e estilos consistentes com a identidade visual do projeto
+## Interface e Experiência do Usuário
 
-- **Popup de Confirmação**: Interface simplificada e moderna para confirmação de operações
-  - Design minimalista com cores contextuais (verde para sucesso, vermelho para erro)
-  - Botão "Entendi" para confirmação
-  - Transições e animações aprimoradas
+### Design System Moderno
 
-### Melhorias de Upload
+- **Componentes Reutilizáveis**: Biblioteca baseada em Radix UI com design consistente
+- **Tema Adaptativo**: Suporte completo a modo escuro/claro com Next Themes
+- **Responsividade**: Interface otimizada para desktop, tablet e mobile
+- **Acessibilidade**: Componentes com suporte completo a ARIA e navegação por teclado
 
-- **Botão de Input com Ícone**: Permite selecionar novo arquivo sem remover o atual
-- **Feedback Visual**: Indicação clara de arquivos selecionados
-- **Interação Intuitiva**: Botões com ícones para ações comuns (upload, remoção)
+### Interações Avançadas
+
+- **Feedback em Tempo Real**:
+  - Barras de progresso animadas para operações longas
+  - Notificações toast para ações do usuário
+  - Estados de loading com skeletons
+  - Indicadores visuais de status
+
+- **Formulários Inteligentes**:
+  - Validação em tempo real com Zod
+  - Mensagens de erro contextuais
+  - Auto-save para prevenir perda de dados
+  - Campos com autocomplete e sugestões
+
+### Experiência de Upload
+
+- **Drag & Drop Avançado**: Interface intuitiva para upload de arquivos
+- **Validação Instantânea**: Verificação de formato e estrutura em tempo real
+- **Preview de Dados**: Visualização prévia dos dados antes do processamento
+- **Gestão de Arquivos**: Controle completo sobre arquivos anexados
 
 ## Arquitetura Técnica
 
-### Frontend
+### Frontend Moderno
 
-- **Framework**: Next.js com React
-- **UI Components**: Biblioteca de componentes personalizados baseada em Radix UI
-- **Estilização**: Tailwind CSS
-- **Gerenciamento de Estado**: React Hooks (useState, useEffect, useActionState)
-- **Feedback Visual**: Popups interativos e indicadores de progresso
+- **Framework**: Next.js 15.2.4 com App Router
+- **Runtime**: React 19 com Server Components
+- **Linguagem**: TypeScript 5 para type safety
+- **UI Framework**: Radix UI + Tailwind CSS
+- **Gerenciamento de Estado**: React Hooks + Server Actions
+- **Formulários**: React Hook Form + Zod validation
+- **Gráficos**: Recharts para visualizações interativas
+- **Ícones**: Lucide React para iconografia consistente
 
-### Backend
+### Backend e Infraestrutura
 
-- **API Routes**: Server Actions do Next.js para processamento de dados
-- **Banco de Dados**: Supabase (PostgreSQL)
-- **Autenticação**: Supabase Auth
-- **Armazenamento**: Supabase Storage para arquivos
+- **Server Actions**: Next.js Server Actions para processamento
+- **Banco de Dados**: Supabase PostgreSQL com RLS
+- **Autenticação**: Supabase Auth com SSR
+- **Storage**: Supabase Storage para arquivos
+- **Processamento**: Algoritmos proprietários de ML
+- **Exportação**: XLSX para relatórios Excel
 
-### Principais Arquivos e Diretórios
+### Segurança e Performance
 
-- `app/page.tsx`: Página principal para cálculo de previsão de demanda
-- `app/dashboard/page.tsx`: Dashboard para visualização de métricas
-- `app/analise-dados/page.tsx`: Interface para análise detalhada dos dados
-- `app/actions.ts`: Server Actions para processamento de dados e cálculos
-- `app/saveToSupabase.ts`: Funções para salvar dados no Supabase
-- `lib/supabase/`: Configuração e clientes do Supabase
-- `components/ui/`: Componentes de UI reutilizáveis
+- **Row Level Security**: Políticas de acesso granular no Supabase
+- **Server-Side Rendering**: SSR/SSG para performance otimizada
+- **Type Safety**: TypeScript em todo o stack
+- **Validação**: Zod schemas para validação de dados
+- **Otimização**: Code splitting e lazy loading automático
 
-## Algoritmo de Previsão
+### Estrutura do Projeto
 
-O sistema utiliza um algoritmo sofisticado para calcular previsões de demanda, considerando:
+```
+app/
+├── page.tsx                 # Página principal - Upload e processamento
+├── dashboard/page.tsx       # Dashboard executivo com métricas
+├── analise-dados/page.tsx   # Análise detalhada e edição de dados
+├── actions.ts               # Server Actions (1600+ linhas de lógica)
+├── saveToSupabase.ts        # Integração com banco de dados
+├── clearTableAction.ts      # Ações de limpeza de dados
+├── layout.tsx               # Layout principal da aplicação
+└── globals.css              # Estilos globais
 
-- Histórico de vendas
-- Sazonalidade
-- Eventos recorrentes
-- Datas atípicas
-- Validação cruzada para ajuste de precisão
-- Categorização de SKUs por volume de vendas
+components/
+├── ui/                      # Biblioteca de componentes Radix UI
+└── theme-provider.tsx       # Provider de temas
+
+lib/
+├── supabase/               # Configuração Supabase (client/server)
+└── utils.ts                # Utilitários e helpers
+
+hooks/
+├── use-mobile.tsx          # Hook para detecção mobile
+└── use-toast.ts            # Sistema de notificações
+```
+
+## Algoritmos de Previsão
+
+O sistema implementa algoritmos avançados de machine learning:
+
+### Processamento de Dados
+- **Limpeza Automática**: Remoção de outliers e dados inconsistentes
+- **Normalização**: Padronização de formatos e escalas
+- **Agregação Inteligente**: Consolidação por SKU, período e categoria
+
+### Modelos de Previsão
+- **Análise de Tendências**: Identificação de padrões temporais
+- **Sazonalidade**: Detecção automática de ciclos sazonais
+- **Eventos Especiais**: Consideração de datas atípicas e promoções
+- **Validação Cruzada**: Ajuste de precisão com dados históricos
+### Categorização e Métricas
+- **Classificação Automática**: SKUs categorizados por volume (A, B, C)
+- **Métricas de Precisão**: Cálculo de MAPE, MAE e outras métricas
+- **Ajuste Dinâmico**: Algoritmos se adaptam ao comportamento dos dados
+- **Confiabilidade**: Scores de confiança para cada previsão
 
 ## Integração com Supabase
 
-O sistema utiliza o Supabase como backend, com as seguintes características:
+### Banco de Dados
+- **Tabela Principal**: `previsoes_demanda` com schema otimizado
+- **Row Level Security**: Políticas granulares de acesso
+- **Índices Otimizados**: Performance para consultas complexas
+- **Backup Automático**: Proteção de dados integrada
 
-- Tabela `previsoes_demanda` para armazenar os resultados
-- Row Level Security (RLS) configurado para controle de acesso
-- Políticas de acesso definidas para operações CRUD
-- Autenticação de usuários para acesso seguro aos dados
-- **Atualização em Lote**: Processamento otimizado para grandes volumes de dados
-  - Progresso em tempo real durante atualizações
-  - Tratamento de erros robusto
-  - Feedback visual durante operações de longa duração
+### Operações Avançadas
+- **Batch Processing**: Processamento em lote para grandes volumes
+- **Real-time Updates**: Sincronização em tempo real
+- **Error Handling**: Tratamento robusto de erros
+- **Audit Trail**: Histórico completo de modificações
 
-## Como Utilizar
+## Guia de Uso
 
-1. **Página Inicial**: Faça upload dos arquivos de dados e defina os parâmetros de previsão
-2. **Processamento**: O sistema processará os dados e calculará as previsões
-3. **Resultados**: Visualize os resultados e faça download se necessário
-4. **Dashboard**: Acesse o dashboard para uma visão geral das previsões
-5. **Análise**: Utilize a página de análise para explorar os dados em detalhes
+### 1. Preparação dos Dados
+- Prepare arquivos CSV com colunas: `data`, `sku`, `vendas`
+- Verifique formato de datas (YYYY-MM-DD)
+- Remova dados duplicados ou inconsistentes
 
-## Requisitos Técnicos
+### 2. Processamento
+- Acesse a página principal e faça upload do arquivo
+- Configure parâmetros de previsão (período, dias, eventos)
+- Execute o processamento e aguarde os resultados
 
-- Node.js (versão recomendada: 18.x ou superior)
-- Conta no Supabase para configuração do banco de dados
-- Navegador moderno com suporte a JavaScript
+### 3. Análise
+- Visualize métricas no dashboard executivo
+- Explore dados detalhados na página de análise
+- Exporte relatórios em Excel para compartilhamento
 
-## Desenvolvimento
+## Instalação e Execução
 
-Para executar o projeto em ambiente de desenvolvimento:
+### Pré-requisitos
+- **Node.js**: Versão 18.x ou superior
+- **pnpm**: Gerenciador de pacotes recomendado
+- **Supabase**: Conta configurada com projeto
 
+### Desenvolvimento
 ```bash
-npm install
-npm run dev
+# Instalar dependências
+pnpm install
+
+# Executar em modo desenvolvimento
+pnpm dev
+
+# Acessar em http://localhost:3000
 ```
 
-Para build de produção:
-
+### Produção
 ```bash
-npm run build
-npm start
+# Build otimizado
+pnpm build
+
+# Executar em produção
+pnpm start
+```
+
+### Variáveis de Ambiente
+```env
+NEXT_PUBLIC_SUPABASE_URL=sua_url_supabase
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave_anonima
+SUPABASE_SERVICE_ROLE_KEY=sua_chave_service_role
 ```
