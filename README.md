@@ -36,7 +36,7 @@ A página principal oferece uma interface completa para:
   - Interface moderna com drag & drop
   - Validação automática de formato e estrutura dos dados
   - Feedback visual em tempo real durante o upload
-  - teste
+  - teste 3
 
 - **Configuração Avançada de Parâmetros**:
   - Período de previsão personalizável (data início e fim)
