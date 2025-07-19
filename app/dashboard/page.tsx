@@ -928,7 +928,7 @@ export default function DashboardPage() {
                       </div>
                     </CardHeader>
                     <CardContent className="p-0">
-                      <div className="h-[500px] overflow-y-auto">
+                      <div className="h-[540px] overflow-y-auto">
                         <div className="sticky top-0 bg-gray-50 z-50 border-b border-gray-200">
                           <Table>
                             <TableHeader>
@@ -946,52 +946,52 @@ export default function DashboardPage() {
                                     </Button>
                                   </div>
                                 </TableHead>
-                                <TableHead className="font-semibold text-gray-700 text-sm w-20 text-center">
-                                  <div className="flex items-center justify-center">
+                                <TableHead className="font-semibold text-gray-700 text-sm w-20">
+                                  <div className="flex items-center justify-between">
                                     <span>Família</span>
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900 ml-2"
+                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900"
                                       onClick={() => handleSortPositive('fml_item')}
                                     >
                                       <ArrowUpDown className="w-3 h-3" />
                                     </Button>
                                   </div>
                                 </TableHead>
-                                <TableHead className="font-semibold text-gray-700 text-sm w-24 text-center">
-                                  <div className="flex items-center justify-center">
+                                <TableHead className="font-semibold text-gray-700 text-sm w-24">
+                                  <div className="flex items-center justify-between">
                                     <span>Média Atual</span>
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900 ml-2"
+                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900"
                                       onClick={() => handleSortPositive('media_prevista')}
                                     >
                                       <ArrowUpDown className="w-3 h-3" />
                                     </Button>
                                   </div>
                                 </TableHead>
-                                <TableHead className="font-semibold text-gray-700 text-sm w-28 text-center">
-                                  <div className="flex items-center justify-center">
+                                <TableHead className="font-semibold text-gray-700 text-sm w-28">
+                                  <div className="flex items-center justify-between">
                                     <span>Cálculo Realizado</span>
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900 ml-2"
+                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900"
                                       onClick={() => handleSortPositive('calculo_realizado')}
                                     >
                                       <ArrowUpDown className="w-3 h-3" />
                                     </Button>
                                   </div>
                                 </TableHead>
-                                <TableHead className="font-semibold text-gray-700 text-sm w-24 text-center">
-                                  <div className="flex items-center justify-center">
+                                <TableHead className="font-semibold text-gray-700 text-sm w-24">
+                                  <div className="flex items-center justify-between">
                                     <span>Variação (%)</span>
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900 ml-2"
+                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900"
                                       onClick={() => handleSortPositive('diferencaCalculada')}
                                     >
                                       <ArrowUpDown className="w-3 h-3" />
@@ -1004,8 +1004,8 @@ export default function DashboardPage() {
                         </div>
                         <Table>
                           <TableBody>
-                            {filteredPositiveSkus.length > 0 ? (
-                              filteredPositiveSkus.map((item, index) => (
+                            {paginatedPositiveSkus.length > 0 ? (
+                              paginatedPositiveSkus.map((item, index) => (
                                 <TableRow key={index} className="hover:bg-green-50">
                                   <TableCell className="font-medium py-2 text-sm w-32">{item.sku}</TableCell>
                                   <TableCell className="text-center py-2 text-sm w-20">{item.fml_item || '-'}</TableCell>
@@ -1031,6 +1031,38 @@ export default function DashboardPage() {
                             )}
                           </TableBody>
                         </Table>
+                        
+                        {/* Paginação SKUs Negativos */}
+                        {filteredNegativeSkus.length > ITEMS_PER_PAGE && (
+                          <div className="flex items-center justify-between mt-4 px-2">
+                            <div className="text-sm text-gray-600">
+                              Mostrando {((currentPageNegative - 1) * ITEMS_PER_PAGE) + 1} a {Math.min(currentPageNegative * ITEMS_PER_PAGE, filteredNegativeSkus.length)} de {filteredNegativeSkus.length} itens
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPageNegative(prev => Math.max(1, prev - 1))}
+                                disabled={currentPageNegative === 1}
+                                className="h-8 w-8 p-0"
+                              >
+                                ←
+                              </Button>
+                              <span className="text-sm font-medium px-2">
+                                {currentPageNegative} de {Math.ceil(filteredNegativeSkus.length / ITEMS_PER_PAGE)}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPageNegative(prev => Math.min(Math.ceil(filteredNegativeSkus.length / ITEMS_PER_PAGE), prev + 1))}
+                                disabled={currentPageNegative >= Math.ceil(filteredNegativeSkus.length / ITEMS_PER_PAGE)}
+                                className="h-8 w-8 p-0"
+                              >
+                                →
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -1126,7 +1158,7 @@ export default function DashboardPage() {
                       </div>
                     </CardHeader>
                     <CardContent className="p-0">
-                      <div className="h-[500px] overflow-y-auto">
+                      <div className="h-[540px] overflow-y-auto">
                         <div className="sticky top-0 bg-gray-50 z-50 border-b border-gray-200">
                           <Table>
                             <TableHeader>
@@ -1144,52 +1176,52 @@ export default function DashboardPage() {
                                     </Button>
                                   </div>
                                 </TableHead>
-                                <TableHead className="font-semibold text-gray-700 text-sm w-20 text-center">
-                                  <div className="flex items-center justify-center">
+                                <TableHead className="font-semibold text-gray-700 text-sm w-20">
+                                  <div className="flex items-center justify-between">
                                     <span>Família</span>
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900 ml-2"
+                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900"
                                       onClick={() => handleSortNegative('fml_item')}
                                     >
                                       <ArrowUpDown className="w-3 h-3" />
                                     </Button>
                                   </div>
                                 </TableHead>
-                                <TableHead className="font-semibold text-gray-700 text-sm w-24 text-center">
-                                  <div className="flex items-center justify-center">
+                                <TableHead className="font-semibold text-gray-700 text-sm w-24">
+                                  <div className="flex items-center justify-between">
                                     <span>Média Atual</span>
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900 ml-2"
+                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900"
                                       onClick={() => handleSortNegative('media_prevista')}
                                     >
                                       <ArrowUpDown className="w-3 h-3" />
                                     </Button>
                                   </div>
                                 </TableHead>
-                                <TableHead className="font-semibold text-gray-700 text-sm w-28 text-center">
-                                  <div className="flex items-center justify-center">
+                                <TableHead className="font-semibold text-gray-700 text-sm w-28">
+                                  <div className="flex items-center justify-between">
                                     <span>Cálculo Realizado</span>
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900 ml-2"
+                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900"
                                       onClick={() => handleSortNegative('calculo_realizado')}
                                     >
                                       <ArrowUpDown className="w-3 h-3" />
                                     </Button>
                                   </div>
                                 </TableHead>
-                                <TableHead className="font-semibold text-gray-700 text-sm w-24 text-center">
-                                  <div className="flex items-center justify-center">
+                                <TableHead className="font-semibold text-gray-700 text-sm w-24">
+                                  <div className="flex items-center justify-between">
                                     <span>Variação (%)</span>
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900 ml-2"
+                                      className="h-4 w-4 p-0 text-gray-700 hover:text-gray-900"
                                       onClick={() => handleSortNegative('diferencaCalculada')}
                                     >
                                       <ArrowUpDown className="w-3 h-3" />
@@ -1202,8 +1234,8 @@ export default function DashboardPage() {
                         </div>
                         <Table>
                           <TableBody>
-                            {filteredNegativeSkus.length > 0 ? (
-                              filteredNegativeSkus.map((item, index) => (
+                            {paginatedNegativeSkus.length > 0 ? (
+                              paginatedNegativeSkus.map((item, index) => (
                                 <TableRow key={index} className="hover:bg-red-50">
                                   <TableCell className="font-medium py-2 text-sm w-32">{item.sku}</TableCell>
                                   <TableCell className="text-center py-2 text-sm w-20">{item.fml_item || '-'}</TableCell>
@@ -1229,6 +1261,38 @@ export default function DashboardPage() {
                             )}
                           </TableBody>
                         </Table>
+                        
+                        {/* Paginação SKUs Negativos */}
+                        {filteredNegativeSkus.length > ITEMS_PER_PAGE && (
+                          <div className="flex items-center justify-between mt-4 px-2">
+                            <div className="text-sm text-gray-600">
+                              Mostrando {((currentPageNegative - 1) * ITEMS_PER_PAGE) + 1} a {Math.min(currentPageNegative * ITEMS_PER_PAGE, filteredNegativeSkus.length)} de {filteredNegativeSkus.length} itens
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPageNegative(prev => Math.max(1, prev - 1))}
+                                disabled={currentPageNegative === 1}
+                                className="h-8 w-8 p-0"
+                              >
+                                ←
+                              </Button>
+                              <span className="text-sm font-medium px-2">
+                                {currentPageNegative} de {Math.ceil(filteredNegativeSkus.length / ITEMS_PER_PAGE)}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPageNegative(prev => Math.min(Math.ceil(filteredNegativeSkus.length / ITEMS_PER_PAGE), prev + 1))}
+                                disabled={currentPageNegative >= Math.ceil(filteredNegativeSkus.length / ITEMS_PER_PAGE)}
+                                className="h-8 w-8 p-0"
+                              >
+                                →
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
