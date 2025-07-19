@@ -17,6 +17,16 @@ Este sistema é uma aplicação web moderna desenvolvida com **Next.js 15** e **
 
 ## Funcionalidades Principais
 
+### ✨ Melhorias Recentes
+
+**Página de Análise de Dados - Versão Aprimorada**:
+- **Novo Botão Importar**: Funcionalidade para recarregar dados diretamente do banco Supabase
+- **Validação Aprimorada**: Campo "Cálculo Realizado" agora aceita apenas números inteiros
+- **Indicador "Primeira Média"**: Exibição especial para produtos sem histórico de cálculo
+- **Prevenção de Erros**: Bloqueio de caracteres não numéricos em campos numéricos
+- **Interface Melhorada**: Botões de ação com hover estático e ícones intuitivos
+- **Correções de Bugs**: Resolução de erros de variáveis não definidas
+
 ### 1. Cálculo de Previsão de Demanda
 
 A página principal oferece uma interface completa para:
@@ -68,21 +78,32 @@ Interface avançada para análise profunda:
 
 - **Visualização Completa**:
   - Tabelas interativas com paginação inteligente
-  - Edição inline de dados com validação
-  - Filtros avançados por múltiplos campos
-  - Ordenação dinâmica e personalizável
+  - Edição inline de dados com validação rigorosa
+  - Filtros avançados por múltiplos campos (SKU, Família)
+  - Ordenação dinâmica e personalizável por qualquer coluna
+  - Validação de entrada para campos numéricos (apenas inteiros)
 
-- **Exportação e Sincronização**:
-  - Exportação para Excel com progresso em tempo real
+- **Gestão de Dados Avançada**:
+  - **Botão Importar**: Recarrega dados diretamente do Supabase
+  - **Botão Exportar**: Exportação para Excel com progresso em tempo real
   - Atualização em lote otimizada para o Supabase
+  - Limpeza automática de cache de sessão
   - Backup automático antes de modificações
   - Histórico de alterações e auditoria
+
+- **Validação e Controle de Qualidade**:
+  - Campo "Cálculo Realizado" restrito a valores inteiros positivos
+  - Exibição de "Primeira Média" para novos produtos
+  - Cálculo automático de diferenças percentuais
+  - Indicadores visuais para variações significativas
+  - Prevenção de entrada de caracteres não numéricos
 
 - **Análise Comparativa**:
   - Comparação entre diferentes períodos
   - Análise de desvios e variações
   - Identificação de outliers e anomalias
   - Relatórios de precisão dos algoritmos
+  - Destaque visual para primeiras médias vs. atualizações
 
 ## Interface e Experiência do Usuário
 
@@ -150,7 +171,7 @@ Interface avançada para análise profunda:
 app/
 ├── page.tsx                 # Página principal - Upload e processamento
 ├── dashboard/page.tsx       # Dashboard executivo com métricas
-├── analise-dados/page.tsx   # Análise detalhada e edição de dados
+├── analise-dados/page.tsx   # Análise detalhada com importação e validação
 ├── actions.ts               # Server Actions (1600+ linhas de lógica)
 ├── saveToSupabase.ts        # Integração com banco de dados
 ├── clearTableAction.ts      # Ações de limpeza de dados
