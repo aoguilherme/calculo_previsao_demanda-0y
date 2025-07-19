@@ -61,6 +61,7 @@ export default function AnaliseDadosPage() {
   const [dados, setDados] = useState<PrevisaoDemanda[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const [editingRow, setEditingRow] = useState<string | null>(null)
   
   // Estados do chat IA
@@ -424,6 +425,33 @@ export default function AnaliseDadosPage() {
       title: "Valor atualizado",
       description: `Cálculo realizado para ${sku} foi atualizado.`,
     })
+  }
+
+  // Função para importar dados do Supabase (resetar tabela)
+  const handleImportData = async () => {
+    setIsLoading(true)
+    
+    try {
+      // Limpar sessionStorage dos cálculos realizados
+      sessionStorage.removeItem('calculationResults')
+      
+      // Recarregar dados do Supabase
+      await carregarDados()
+      
+      toast({
+        title: "Dados importados",
+        description: "Tabela resetada com dados atualizados do Supabase.",
+      })
+    } catch (error) {
+      console.error('Erro ao importar dados:', error)
+      toast({
+        title: "Erro na importação",
+        description: "Não foi possível importar os dados do Supabase.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // Função para atualizar médias no Supabase e exportar Excel
@@ -978,27 +1006,43 @@ export default function AnaliseDadosPage() {
                 
                 {/* Botão Exportar no centro-direita */}
                 <div className="flex items-center">
-                  <Button
-                    onClick={handleSaveAndExport}
-                    disabled={isSaving || dadosProcessados.length === 0}
-                    variant="outline"
-                    size="lg"
-                    className="bg-[#172133] border-[#172133] text-white hover:bg-[#0f1a2a] hover:border-[#0f1a2a] h-12 w-12 p-0 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
-                    title={isSaving ? 'Salvando...' : 'Salvar e Exportar'}
-                  >
-                    {isSaving ? (
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    ) : (
-                      <Download className="w-6 h-6" />
-                    )}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={handleImportData}
+                      disabled={isLoading}
+                      variant="outline"
+                      size="lg"
+                      className="bg-[#28818F] border-[#28818F] text-white hover:bg-[#28818F] hover:border-[#28818F] h-12 w-12 p-0 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
+                      title="Importar dados do Supabase"
+                    >
+                      {isLoading ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      ) : (
+                        <Upload className="w-6 h-6" />
+                      )}
+                    </Button>
+                    <Button
+                      onClick={handleSaveAndExport}
+                      disabled={isSaving || dadosProcessados.length === 0}
+                      variant="outline"
+                      size="lg"
+                      className="bg-[#172133] border-[#172133] text-white hover:bg-[#0f1a2a] hover:border-[#0f1a2a] h-12 w-12 p-0 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
+                      title={isSaving ? 'Salvando...' : 'Salvar e Exportar'}
+                    >
+                      {isSaving ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      ) : (
+                        <Download className="w-6 h-6" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
           </CardHeader>
           
           <CardContent className="p-6">
-            <div className="rounded-lg border border-slate-200 h-[635px] flex flex-col">
+            <div className="rounded-lg border border-slate-200 h-[602px] flex flex-col">
               <div className="sticky top-0 bg-[#39ca96] z-50 border-b-2 border-[#39ca96]">
                 <Table>
                   <TableHeader>
@@ -1023,10 +1067,10 @@ export default function AnaliseDadosPage() {
                           </div>
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-20">
-                        <div className="flex items-center justify-between">
+                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-20 text-center">
+                        <div className="flex items-center justify-center">
                           <span>Família</span>
-                          <div className="flex flex-col">
+                          <div className="flex flex-col ml-2">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1043,10 +1087,10 @@ export default function AnaliseDadosPage() {
                           </div>
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24">
-                        <div className="flex items-center justify-between">
+                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24 text-center">
+                        <div className="flex items-center justify-center">
                           <span>Média Atual</span>
-                          <div className="flex flex-col">
+                          <div className="flex flex-col ml-2">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1063,10 +1107,10 @@ export default function AnaliseDadosPage() {
                           </div>
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24">
-                        <div className="flex items-center justify-between">
+                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24 text-center">
+                        <div className="flex items-center justify-center">
                           <span>Data Implant.</span>
-                          <div className="flex flex-col">
+                          <div className="flex flex-col ml-2">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1083,10 +1127,10 @@ export default function AnaliseDadosPage() {
                           </div>
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-28">
-                        <div className="flex items-center justify-between">
+                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-28 text-center">
+                        <div className="flex items-center justify-center">
                           <span>Cálculo Realizado</span>
-                          <div className="flex flex-col">
+                          <div className="flex flex-col ml-2">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1103,10 +1147,10 @@ export default function AnaliseDadosPage() {
                           </div>
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24">
-                        <div className="flex items-center justify-between">
+                      <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24 text-center">
+                        <div className="flex items-center justify-center">
                           <span>Diferença (%)</span>
-                          <div className="flex flex-col">
+                          <div className="flex flex-col ml-2">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1183,8 +1227,21 @@ export default function AnaliseDadosPage() {
                                   <Input
                                     type="number"
                                     step="1"
+                                    min="0"
                                     value={editValue}
-                                    onChange={(e) => setEditValue(e.target.value)}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      // Permitir apenas números inteiros
+                                      if (value === '' || /^\d+$/.test(value)) {
+                                        setEditValue(value);
+                                      }
+                                    }}
+                                    onKeyDown={(e) => {
+                                      // Bloquear teclas que não são números, backspace, delete, tab ou enter
+                                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                                        e.preventDefault();
+                                      }
+                                    }}
                                     className="w-20 h-6 text-sm text-center"
                                     autoFocus
                                   />
@@ -1196,20 +1253,30 @@ export default function AnaliseDadosPage() {
                               )}
                             </TableCell>
                             <TableCell className="text-center py-2 w-24">
-                              <span className={`font-medium text-sm ${
-                                item.calculo_realizado && item.calculo_realizado > 0
-                                  ? item.diferencaCalculada! > 0
-                                    ? 'text-green-600'
-                                    : item.diferencaCalculada! < 0
-                                      ? 'text-red-600'
-                                      : 'text-slate-500'
-                                  : 'text-slate-500'
-                              }`}>
-                                {item.calculo_realizado && item.calculo_realizado > 0 
-                                   ? `${item.diferencaCalculada!.toFixed(1)}%`
-                                   : '0.0%'
-                                }
-                              </span>
+                              {/* Verificar se é "Primeira Média" */}
+                              {item.media_prevista === 0 && item.calculo_realizado && item.calculo_realizado > 0 ? (
+                                <span 
+                                  className="font-medium text-sm px-2 py-1 rounded" 
+                                  style={{ backgroundColor: '#28818F', color: '#FFFFFF' }}
+                                >
+                                  Primeira Média
+                                </span>
+                              ) : (
+                                <span className={`font-medium text-sm ${
+                                  item.calculo_realizado && item.calculo_realizado > 0
+                                    ? item.diferencaCalculada! > 0
+                                      ? 'text-green-600'
+                                      : item.diferencaCalculada! < 0
+                                        ? 'text-red-600'
+                                        : 'text-slate-500'
+                                    : 'text-slate-500'
+                                }`}>
+                                  {item.calculo_realizado && item.calculo_realizado > 0 
+                                     ? `${item.diferencaCalculada!.toFixed(1)}%`
+                                     : '0.0%'
+                                  }
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="text-center py-2 w-20">
                               {editingRow === item.sku ? (
@@ -1255,7 +1322,7 @@ export default function AnaliseDadosPage() {
             
 
             {/* Seção de informações dos dados */}
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-2 flex items-center justify-between">
               <div className="flex items-center gap-3 text-sm text-slate-600">
                 <span>Total de SKUs: {totalSkus.toLocaleString('pt-BR')}</span>
                 <span>Exibindo: {dadosProcessados.length.toLocaleString('pt-BR')}</span>
