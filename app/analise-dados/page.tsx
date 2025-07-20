@@ -18,6 +18,7 @@ import { ArrowUpDown, Filter, Search, X, Edit2, Save, BarChart3, Download, Uploa
 import { createClient } from '@/lib/supabase/client'
 import * as XLSX from 'xlsx'
 import { useRouter } from 'next/navigation'
+import SharedLayout from '@/components/shared-layout'
 
 // Função debounce customizada para evitar dependências externas
 function debounce<T extends (...args: any[]) => any>(
@@ -59,7 +60,6 @@ type SortDirection = 'asc' | 'desc'
 export default function AnaliseDadosPage() {
   const router = useRouter()
   const [dados, setDados] = useState<PrevisaoDemanda[]>([])
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [editingRow, setEditingRow] = useState<string | null>(null)
   
@@ -386,11 +386,11 @@ export default function AnaliseDadosPage() {
 
   // Salvar edição
   const salvarEdicao = (sku: string) => {
-    const novoValor = Math.round(parseFloat(editValue))
-    if (isNaN(novoValor)) {
+    const novoValor = parseInt(editValue)
+    if (isNaN(novoValor) || !Number.isInteger(parseFloat(editValue))) {
       toast({
         title: "Valor inválido",
-        description: "Por favor, insira um número válido.",
+        description: "Apenas valores inteiros são permitidos.",
         variant: "destructive"
       })
       return
@@ -424,6 +424,64 @@ export default function AnaliseDadosPage() {
       title: "Valor atualizado",
       description: `Cálculo realizado para ${sku} foi atualizado.`,
     })
+  }
+
+  // Função para recarregar apenas dados do Supabase
+  const recarregarDadosSupabase = async () => {
+    setLoading(true)
+    setTableLoaded(false)
+    
+    try {
+      const supabase = createClient()
+      let allData: PrevisaoDemanda[] = []
+      const BATCH_SIZE = 1000
+      let offset = 0
+      let hasMore = true
+      
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('previsoes_demanda')
+          .select('*')
+          .range(offset, offset + BATCH_SIZE - 1)
+          .order('sku')
+        
+        if (error) {
+          console.error('Erro ao carregar dados:', error)
+          throw error
+        }
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data]
+          offset += BATCH_SIZE
+          hasMore = data.length === BATCH_SIZE
+        } else {
+          hasMore = false
+        }
+      }
+      
+      // Limpar dados de cálculo do sessionStorage
+      sessionStorage.removeItem('calculationResults')
+      sessionStorage.removeItem('calculationData')
+      
+      setDados(allData)
+      setTotalSkus(allData.length)
+      
+      toast({
+        title: "Dados atualizados!",
+        description: `Tabela recarregada com ${allData.length.toLocaleString('pt-BR')} registros do Supabase.`,
+      })
+      
+    } catch (error) {
+      console.error('Erro ao recarregar dados:', error)
+      toast({
+        title: "Erro ao recarregar dados",
+        description: "Ocorreu um erro ao buscar os dados atualizados do Supabase.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+      setTableLoaded(true)
+    }
   }
 
   // Função para atualizar médias no Supabase e exportar Excel
@@ -529,38 +587,50 @@ export default function AnaliseDadosPage() {
       
       setProgressState({current: 95, total: 100, currentSku: '', message: 'Finalizando processo...'})
       
-      // Calcular estatísticas de diferenças
-      const skusComDiferenca = dadosProcessados.filter(item => 
-        item.calculo_realizado && 
+      // Calcular estatísticas detalhadas de processamento
+      const totalSkusProcessados = dados.length
+      const skusComCalculoRealizado = dados.filter(item => item.calculo_realizado && item.calculo_realizado > 0).length
+      const skusComDiferenca = dados.filter(item => 
+        item.calculo_realizado && item.calculo_realizado > 0 &&
         item.media_prevista !== item.calculo_realizado &&
         Math.abs(((item.calculo_realizado - item.media_prevista) / item.media_prevista) * 100) > 0.1 // Diferença maior que 0.1%
       ).length
       
-      const skusSemDiferenca = dadosProcessados.filter(item => 
-        item.calculo_realizado && 
+      const skusSemDiferenca = dados.filter(item => 
+        item.calculo_realizado && item.calculo_realizado > 0 &&
         (item.media_prevista === item.calculo_realizado ||
          Math.abs(((item.calculo_realizado - item.media_prevista) / item.media_prevista) * 100) <= 0.1) // Diferença menor ou igual a 0.1%
       ).length
       
-      // Resultado final
+      const skusSemCalculo = totalSkusProcessados - skusComCalculoRealizado
+      const percentualComDiferenca = skusComCalculoRealizado > 0 ? ((skusComDiferenca / skusComCalculoRealizado) * 100).toFixed(1) : '0.0'
+      
+      // Resultado final com informações detalhadas
       if (errorCount === 0) {
-        setProgressState({current: 100, total: 100, currentSku: '', message: `✅ Atualização concluída com sucesso! ${updatedCount} SKUs atualizados.`})
+        setProgressState({current: 100, total: 100, currentSku: '', message: `✅ Processamento concluído com sucesso! ${updatedCount} SKUs atualizados no Supabase.`})
         setResultPopupState({
           success: true, 
-          message: `Planilha Excel exportada com sucesso!\n\nComparação de Médias:\n• ${skusComDiferenca} SKUs com diferença entre média atual e calculada\n• ${skusSemDiferenca} SKUs sem diferença entre média atual e calculada\n\nArquivo salvo: ${fileName}`
+          message: `📊 PROCESSAMENTO GERAL CONCLUÍDO\n\n📈 Estatísticas dos Dados:\n• Total de SKUs processados: ${totalSkusProcessados.toLocaleString('pt-BR')}\n• SKUs com cálculo realizado: ${skusComCalculoRealizado.toLocaleString('pt-BR')}\n• SKUs sem cálculo: ${skusSemCalculo.toLocaleString('pt-BR')}\n\n🔍 Análise de Diferenças:\n• SKUs com diferença significativa: ${skusComDiferenca.toLocaleString('pt-BR')} (${percentualComDiferenca}%)\n• SKUs sem diferença: ${skusSemDiferenca.toLocaleString('pt-BR')}\n\n💾 Exportação:\n• Planilha Excel gerada: ${fileName}\n• Dados atualizados no Supabase: ${updatedCount.toLocaleString('pt-BR')} registros`
         })
       } else {
-        setProgressState({current: 100, total: 100, currentSku: '', message: `⚠️ Atualização concluída com ${errorCount} erros`})
+        setProgressState({current: 100, total: 100, currentSku: '', message: `⚠️ Processamento concluído com ${errorCount} erros`})
         setResultPopupState({
           success: false,
-          message: `Planilha Excel exportada com sucesso!\n\nComparação de Médias:\n• ${skusComDiferenca} SKUs com diferença entre média atual e calculada\n• ${skusSemDiferenca} SKUs sem diferença entre média atual e calculada\n\nPrimeiros erros:\n${errors.slice(0, 3).join('\n')}${errors.length > 3 ? '\n...' : ''}`
+          message: `📊 PROCESSAMENTO GERAL CONCLUÍDO (com erros)\n\n📈 Estatísticas dos Dados:\n• Total de SKUs processados: ${totalSkusProcessados.toLocaleString('pt-BR')}\n• SKUs com cálculo realizado: ${skusComCalculoRealizado.toLocaleString('pt-BR')}\n• SKUs sem cálculo: ${skusSemCalculo.toLocaleString('pt-BR')}\n\n🔍 Análise de Diferenças:\n• SKUs com diferença significativa: ${skusComDiferenca.toLocaleString('pt-BR')} (${percentualComDiferenca}%)\n• SKUs sem diferença: ${skusSemDiferenca.toLocaleString('pt-BR')}\n\n💾 Exportação:\n• Planilha Excel gerada: ${fileName}\n• Erros no Supabase: ${errorCount}\n\n❌ Primeiros erros:\n${errors.slice(0, 2).join('\n')}${errors.length > 2 ? '\n...' : ''}`
         })
       }
       
-      // Aguardar um pouco antes de mostrar o resultado final
-      setTimeout(() => {
+      // Aguardar um pouco antes de recarregar os dados e mostrar o resultado final
+      setTimeout(async () => {
         setShowProgressPopup(false)
         setShowResultPopup(true)
+        
+        // Recarregar dados do Supabase após salvar
+        try {
+          await recarregarDadosSupabase()
+        } catch (error) {
+          console.error('Erro ao recarregar dados após salvamento:', error)
+        }
       }, 1500)
       
     } catch (error) {
@@ -722,143 +792,10 @@ export default function AnaliseDadosPage() {
   // Removido: tela de carregamento completa
 
   return (
-    <div className="h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex overflow-hidden">
-      {/* Menu Lateral */}
-      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="fixed top-4 left-4 z-50 lg:hidden bg-white/95 border-[#176B87]/30 text-[#176B87] hover:bg-[#176B87] hover:text-white shadow-lg backdrop-blur-sm transition-all duration-300"
-          >
-            <Menu className="h-4 w-4" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-80 p-0 bg-white border-r border-gray-100 shadow-2xl drop-shadow-2xl">
-          <div className="flex flex-col h-full">
-            <div className="bg-gradient-to-br from-[#176B87] to-[#145A6B] p-8 shadow-lg">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm">
-                  <BarChart3 className="w-7 h-7 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white tracking-tight">SupplyMind</h2>
-                  <p className="text-white/80 text-sm font-medium">Previsão de Demanda</p>
-                </div>
-              </div>
-            </div>
-            <nav className="flex-1 p-8 space-y-4">
-              <Button
-                variant="ghost"
-                className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#176B87]/10 hover:text-[#176B87] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
-                onClick={() => {
-                  router.push('/')
-                  setSidebarOpen(false)
-                }}
-              >
-                <div className="w-10 h-10 bg-[#176B87]/10 rounded-xl flex items-center justify-center mr-4">
-                  <Calculator className="h-5 w-5 text-[#176B87]" />
-                </div>
-                <div className="text-left">
-                  <div className="font-bold text-base">Cálculo</div>
-                  <div className="text-sm opacity-70">Previsão de Demanda</div>
-                </div>
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full justify-start h-14 bg-gradient-to-r from-[#176B87] to-[#145A6B] text-white hover:from-[#145A6B] hover:to-[#124C5F] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
-                onClick={() => {
-                  router.push('/analise-dados')
-                  setSidebarOpen(false)
-                }}
-              >
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-4">
-                  <BarChart3 className="h-5 w-5 text-white" />
-                </div>
-                <div className="text-left">
-                  <div className="font-bold text-base">Análise</div>
-                  <div className="text-sm opacity-90">Dados e Resultados</div>
-                </div>
-              </Button>
-            </nav>
-            <div className="p-8 border-t border-gray-100">
-              <div className="text-xs text-gray-500 text-center">
-                <p className="font-medium">Sistema de Previsão</p>
-                <p className="opacity-70">Versão 1.0</p>
-              </div>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* Menu Lateral Desktop */}
-      <div className="hidden lg:flex lg:w-80 lg:flex-col lg:bg-white lg:border-r lg:border-gray-100 lg:shadow-2xl lg:drop-shadow-2xl">
-        <div className="bg-gradient-to-br from-[#176B87] to-[#145A6B] p-8 shadow-lg">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm">
-              <BarChart3 className="w-7 h-7 text-white" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-white tracking-tight">SupplyMind</h2>
-              <p className="text-white/80 text-sm font-medium">Previsão de Demanda</p>
-            </div>
-          </div>
-        </div>
-        <nav className="flex-1 p-8 space-y-4">
-          <Button
-            variant="ghost"
-            className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#176B87]/10 hover:text-[#176B87] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
-            onClick={() => router.push('/')}
-          >
-            <div className="w-10 h-10 bg-[#176B87]/10 rounded-xl flex items-center justify-center mr-4">
-              <Calculator className="h-5 w-5 text-[#176B87]" />
-            </div>
-            <div className="text-left">
-              <div className="font-bold text-base">Cálculo</div>
-              <div className="text-sm opacity-70">Previsão de Demanda</div>
-            </div>
-          </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start h-14 bg-gradient-to-r from-[#176B87] to-[#145A6B] text-white hover:from-[#145A6B] hover:to-[#124C5F] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
-            onClick={() => router.push('/analise-dados')}
-          >
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-4">
-              <BarChart3 className="h-5 w-5 text-white" />
-            </div>
-            <div className="text-left">
-              <div className="font-bold text-base">Análise</div>
-              <div className="text-sm opacity-90">Dados e Resultados</div>
-            </div>
-          </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#176B87]/10 hover:text-[#176B87] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
-            onClick={() => router.push('/dashboard')}
-          >
-            <div className="w-10 h-10 bg-[#176B87]/10 rounded-xl flex items-center justify-center mr-4">
-              <TrendingUp className="h-5 w-5 text-[#176B87]" />
-            </div>
-            <div className="text-left">
-              <div className="font-bold text-base">Dashboard</div>
-              <div className="text-sm opacity-70">KPIs e Indicadores</div>
-            </div>
-          </Button>
-        </nav>
-        <div className="p-8 border-t border-gray-100">
-          <div className="text-xs text-gray-500 text-center">
-            <p className="font-medium">Sistema de Previsão</p>
-            <p className="opacity-70">Versão 1.0</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Conteúdo Principal */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+    <SharedLayout>
       <Toaster />
-      
-        {/* Header */}
-        <header className="bg-[#176B87] shadow-xl flex-shrink-0">
+      {/* Header */}
+      <header className="bg-[#176B87] shadow-xl flex-shrink-0">
           <div className="container mx-auto px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -884,7 +821,7 @@ export default function AnaliseDadosPage() {
         {/* Main Content */}
         <main className="flex-1 overflow-auto bg-gradient-to-br from-[#176B87]/5 via-[#145A6B]/10 to-[#124C5F]/15">
           <div className="container mx-auto px-4 py-6">
-        <Card className="bg-white/90 backdrop-blur-sm shadow-xl border-0 rounded-2xl">
+            <Card className="bg-white/90 backdrop-blur-sm shadow-xl border-0 rounded-2xl">
           <CardHeader className="bg-gradient-to-r from-[#124C5F] to-[#176B87] text-white rounded-t-2xl p-2">
             {/* Seção de Filtros Compacta */}
             <div className="p-2">
@@ -998,7 +935,7 @@ export default function AnaliseDadosPage() {
           </CardHeader>
           
           <CardContent className="p-6">
-            <div className="rounded-lg border border-slate-200 h-[635px] flex flex-col">
+            <div className="rounded-lg border border-slate-200 h-[600px] flex flex-col">
               <div className="sticky top-0 bg-[#39ca96] z-50 border-b-2 border-[#39ca96]">
                 <Table>
                   <TableHeader>
@@ -1024,103 +961,93 @@ export default function AnaliseDadosPage() {
                         </div>
                       </TableHead>
                       <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-20">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-center">
                           <span>Família</span>
-                          <div className="flex flex-col">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20"
-                              onClick={() => handleSort('fml_item')}
-                            >
-                              <ArrowUpDown className="w-3 h-3" />
-                            </Button>
-                            {sortField === 'fml_item' && (
-                              <div className="text-xs text-slate-300 mt-1">
-                                {sortDirection === 'asc' ? '↑' : '↓'}
-                              </div>
-                            )}
-                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20 ml-1"
+                            onClick={() => handleSort('fml_item')}
+                          >
+                            <ArrowUpDown className="w-3 h-3" />
+                          </Button>
+                          {sortField === 'fml_item' && (
+                            <div className="text-xs text-slate-300 mt-1 ml-1">
+                              {sortDirection === 'asc' ? '↑' : '↓'}
+                            </div>
+                          )}
                         </div>
                       </TableHead>
                       <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-center">
                           <span>Média Atual</span>
-                          <div className="flex flex-col">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20"
-                              onClick={() => handleSort('media_prevista')}
-                            >
-                              <ArrowUpDown className="w-3 h-3" />
-                            </Button>
-                            {sortField === 'media_prevista' && (
-                              <div className="text-xs text-slate-300 mt-1">
-                                {sortDirection === 'asc' ? '↑' : '↓'}
-                              </div>
-                            )}
-                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20 ml-1"
+                            onClick={() => handleSort('media_prevista')}
+                          >
+                            <ArrowUpDown className="w-3 h-3" />
+                          </Button>
+                          {sortField === 'media_prevista' && (
+                            <div className="text-xs text-slate-300 mt-1 ml-1">
+                              {sortDirection === 'asc' ? '↑' : '↓'}
+                            </div>
+                          )}
                         </div>
                       </TableHead>
                       <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-center">
                           <span>Data Implant.</span>
-                          <div className="flex flex-col">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20"
-                              onClick={() => handleSort('dt_implant')}
-                            >
-                              <ArrowUpDown className="w-3 h-3" />
-                            </Button>
-                            {sortField === 'dt_implant' && (
-                              <div className="text-xs text-slate-300 mt-1">
-                                {sortDirection === 'asc' ? '↑' : '↓'}
-                              </div>
-                            )}
-                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20 ml-1"
+                            onClick={() => handleSort('dt_implant')}
+                          >
+                            <ArrowUpDown className="w-3 h-3" />
+                          </Button>
+                          {sortField === 'dt_implant' && (
+                            <div className="text-xs text-slate-300 mt-1 ml-1">
+                              {sortDirection === 'asc' ? '↑' : '↓'}
+                            </div>
+                          )}
                         </div>
                       </TableHead>
                       <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-28">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-center">
                           <span>Cálculo Realizado</span>
-                          <div className="flex flex-col">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20"
-                              onClick={() => handleSort('calculo_realizado')}
-                            >
-                              <ArrowUpDown className="w-3 h-3" />
-                            </Button>
-                            {sortField === 'calculo_realizado' && (
-                              <div className="text-xs text-slate-300 mt-1">
-                                {sortDirection === 'asc' ? '↑' : '↓'}
-                              </div>
-                            )}
-                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20 ml-1"
+                            onClick={() => handleSort('calculo_realizado')}
+                          >
+                            <ArrowUpDown className="w-3 h-3" />
+                          </Button>
+                          {sortField === 'calculo_realizado' && (
+                            <div className="text-xs text-slate-300 mt-1 ml-1">
+                              {sortDirection === 'asc' ? '↑' : '↓'}
+                            </div>
+                          )}
                         </div>
                       </TableHead>
                       <TableHead className="font-semibold text-white bg-[#278190] border-r border-white/20 text-sm w-24">
-                        <div className="flex items-center justify-between">
-                          <span>Diferença (%)</span>
-                          <div className="flex flex-col">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20"
-                              onClick={() => handleSort('diferenca')}
-                            >
-                              <ArrowUpDown className="w-3 h-3" />
-                            </Button>
-                            {sortField === 'diferenca' && (
-                              <div className="text-xs text-slate-300 mt-1">
-                                {sortDirection === 'asc' ? '↑' : '↓'}
-                              </div>
-                            )}
-                          </div>
+                        <div className="flex items-center justify-center">
+                          <span>Diferença</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-4 w-4 p-0 text-white hover:text-white/80 hover:bg-white/20 ml-1"
+                            onClick={() => handleSort('diferenca')}
+                          >
+                            <ArrowUpDown className="w-3 h-3" />
+                          </Button>
+                          {sortField === 'diferenca' && (
+                            <div className="text-xs text-slate-300 mt-1 ml-1">
+                              {sortDirection === 'asc' ? '↑' : '↓'}
+                            </div>
+                          )}
                         </div>
                       </TableHead>
                       <TableHead className="font-semibold text-white bg-[#278190] text-sm w-20 text-center">Ações</TableHead>
@@ -1183,8 +1110,21 @@ export default function AnaliseDadosPage() {
                                   <Input
                                     type="number"
                                     step="1"
+                                    min="0"
                                     value={editValue}
-                                    onChange={(e) => setEditValue(e.target.value)}
+                                    onChange={(e) => {
+                                      const value = e.target.value
+                                      // Permitir apenas números inteiros
+                                      if (value === '' || /^\d+$/.test(value)) {
+                                        setEditValue(value)
+                                      }
+                                    }}
+                                    onKeyDown={(e) => {
+                                      // Bloquear teclas que não são números, backspace, delete, tab ou enter
+                                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                                        e.preventDefault()
+                                      }
+                                    }}
                                     className="w-20 h-6 text-sm text-center"
                                     autoFocus
                                   />
@@ -1196,20 +1136,29 @@ export default function AnaliseDadosPage() {
                               )}
                             </TableCell>
                             <TableCell className="text-center py-2 w-24">
-                              <span className={`font-medium text-sm ${
-                                item.calculo_realizado && item.calculo_realizado > 0
-                                  ? item.diferencaCalculada! > 0
-                                    ? 'text-green-600'
-                                    : item.diferencaCalculada! < 0
-                                      ? 'text-red-600'
-                                      : 'text-slate-500'
-                                  : 'text-slate-500'
-                              }`}>
-                                {item.calculo_realizado && item.calculo_realizado > 0 
-                                   ? `${item.diferencaCalculada!.toFixed(1)}%`
-                                   : '0.0%'
-                                }
-                              </span>
+                              {item.calculo_realizado && item.calculo_realizado > 0 && item.media_prevista === 0 ? (
+                                <span 
+                                  className="font-medium text-sm px-2 py-1 rounded" 
+                                  style={{ backgroundColor: '#155D70', color: '#FFFFFF' }}
+                                >
+                                  Primeira Média
+                                </span>
+                              ) : (
+                                <span className={`font-medium text-sm ${
+                                  item.calculo_realizado && item.calculo_realizado > 0
+                                    ? item.diferencaCalculada! > 0
+                                      ? 'text-green-600'
+                                      : item.diferencaCalculada! < 0
+                                        ? 'text-red-600'
+                                        : 'text-slate-500'
+                                    : 'text-slate-500'
+                                }`}>
+                                  {item.calculo_realizado && item.calculo_realizado > 0 
+                                     ? `${item.diferencaCalculada!.toFixed(1)}%`
+                                     : '0.0%'
+                                  }
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="text-center py-2 w-20">
                               {editingRow === item.sku ? (
@@ -1267,7 +1216,6 @@ export default function AnaliseDadosPage() {
           </Card>
           </div>
         </main>
-      </div>
 
       {/* Popup de progresso moderno */}
       {showProgressPopup && progressState && (
@@ -1395,6 +1343,6 @@ export default function AnaliseDadosPage() {
 
       {/* Modal de Chat da IA */}
 
-    </div>
+    </SharedLayout>
   )
 }

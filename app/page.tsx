@@ -7,12 +7,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { X, FileText, BarChart3, Upload, CheckCircle, Calendar, Plus, Edit2, Trash2, Calculator, ArrowRight, AlertTriangle, AlertCircle, Download, HelpCircle, Menu, Home, BarChart, Loader2 } from "lucide-react"
+import { X, FileText, BarChart3, Upload, CheckCircle, Calendar, Plus, Edit2, Trash2, Calculator, ArrowRight, AlertTriangle, AlertCircle, Download, HelpCircle, Home, BarChart, Loader2 } from "lucide-react"
 import { calculateDemandForecast } from "./actions"
 import { clearPrevisoesDemanda } from "./clearTableAction"
 import { createClient } from "@/lib/supabase/client"
 import * as XLSX from 'xlsx'
+import SharedLayout from '@/components/shared-layout'
 
 export default function DemandForecastPage() {
   // Mova todos os estados para dentro do componente
@@ -71,7 +71,7 @@ export default function DemandForecastPage() {
   const [showImportSuccessPopup, setShowImportSuccessPopup] = useState(false)
   const [importSuccessData, setImportSuccessData] = useState<{recordCount: number} | null>(null)
   const [showMediaFormatHelp, setShowMediaFormatHelp] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   const [showAttachments, setShowAttachments] = useState(false)
   const [showAnalysisPeriod, setShowAnalysisPeriod] = useState(false)
   const [showAtypicalDates, setShowAtypicalDates] = useState(false)
@@ -588,154 +588,7 @@ export default function DemandForecastPage() {
   }
 
   return (
-    <div className="h-screen bg-gradient-to-br from-[#176B87]/5 via-[#176B87]/10 to-[#145A6B]/15 flex overflow-hidden">
-      {/* Menu Lateral */}
-       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-         <SheetTrigger asChild>
-           <Button
-             variant="outline"
-             size="sm"
-             className="fixed top-4 left-4 z-50 lg:hidden bg-white/95 border-[#176B87]/30 text-[#176B87] hover:bg-[#176B87] hover:text-white shadow-lg backdrop-blur-sm transition-all duration-300"
-           >
-             <Menu className="h-4 w-4" />
-           </Button>
-         </SheetTrigger>
-         <SheetContent side="left" className="w-80 p-0 bg-white border-r border-gray-100 shadow-2xl drop-shadow-2xl">
-           <div className="flex flex-col h-full">
-             <div className="bg-gradient-to-br from-[#176B87] to-[#145A6B] p-8 shadow-lg">
-               <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm">
-                   <Calculator className="w-7 h-7 text-white" />
-                 </div>
-                 <div>
-                   <h2 className="text-2xl font-bold text-white tracking-tight">Sistema</h2>
-                   <p className="text-white/80 text-sm font-medium">Previsão de Demanda</p>
-                 </div>
-               </div>
-             </div>
-             <nav className="flex-1 p-8 space-y-4">
-               <Button
-                 variant="ghost"
-                 className="w-full justify-start h-14 bg-gradient-to-r from-[#176B87] to-[#145A6B] text-white hover:from-[#145A6B] hover:to-[#124C5F] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
-                 onClick={() => {
-                   router.push('/')
-                   setSidebarOpen(false)
-                 }}
-               >
-                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-4">
-                   <Calculator className="h-5 w-5" />
-                 </div>
-                 <div className="text-left">
-                   <div className="font-bold text-base">Cálculo</div>
-                   <div className="text-sm opacity-90">Previsão de Demanda</div>
-                 </div>
-               </Button>
-               <Button
-                 variant="ghost"
-                 className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#176B87]/10 hover:text-[#176B87] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
-                 onClick={() => {
-                   router.push('/analise-dados')
-                   setSidebarOpen(false)
-                 }}
-               >
-                 <div className="w-10 h-10 bg-[#176B87]/10 rounded-xl flex items-center justify-center mr-4">
-                   <BarChart className="h-5 w-5 text-[#176B87]" />
-                 </div>
-                 <div className="text-left">
-                   <div className="font-bold text-base">Análise</div>
-                   <div className="text-sm opacity-70">Dados e Resultados</div>
-                 </div>
-               </Button>
-               <Button
-                 variant="ghost"
-                 className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#176B87]/10 hover:text-[#176B87] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
-                 onClick={() => {
-                   router.push('/dashboard')
-                   setSidebarOpen(false)
-                 }}
-               >
-                 <div className="w-10 h-10 bg-[#176B87]/10 rounded-xl flex items-center justify-center mr-4">
-                   <BarChart3 className="h-5 w-5 text-[#176B87]" />
-                 </div>
-                 <div className="text-left">
-                   <div className="font-bold text-base">Dashboard</div>
-                   <div className="text-sm opacity-70">KPIs e Indicadores</div>
-                 </div>
-               </Button>
-             </nav>
-             <div className="p-8 border-t border-gray-100">
-               <div className="text-xs text-gray-500 text-center">
-                 <p className="font-medium">Sistema de Previsão</p>
-                 <p className="opacity-70">Versão 1.0</p>
-               </div>
-             </div>
-           </div>
-         </SheetContent>
-       </Sheet>
-
-       {/* Menu Lateral Desktop */}
-       <div className="hidden lg:flex lg:w-80 lg:flex-col lg:bg-white lg:border-r lg:border-gray-100 lg:shadow-2xl lg:drop-shadow-2xl">
-         <div className="bg-gradient-to-br from-[#176B87] to-[#145A6B] p-8 shadow-lg">
-           <div className="flex items-center gap-4">
-             <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm">
-               <Calculator className="w-7 h-7 text-white" />
-             </div>
-             <div>
-               <h2 className="text-2xl font-bold text-white tracking-tight">SupplyMind</h2>
-               <p className="text-white/80 text-sm font-medium">Previsão de Demanda</p>
-             </div>
-           </div>
-         </div>
-         <nav className="flex-1 p-8 space-y-4">
-           <Button
-             variant="ghost"
-             className="w-full justify-start h-14 bg-gradient-to-r from-[#176B87] to-[#145A6B] text-white hover:from-[#145A6B] hover:to-[#124C5F] shadow-lg rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
-           >
-             <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-4">
-               <Calculator className="h-5 w-5" />
-             </div>
-             <div className="text-left">
-               <div className="font-bold text-base">Cálculo</div>
-               <div className="text-sm opacity-90">Previsão de Demanda</div>
-             </div>
-           </Button>
-           <Button
-             variant="ghost"
-             className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#176B87]/10 hover:text-[#176B87] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
-             onClick={() => router.push('/analise-dados')}
-           >
-             <div className="w-10 h-10 bg-[#176B87]/10 rounded-xl flex items-center justify-center mr-4">
-               <BarChart className="h-5 w-5 text-[#176B87]" />
-             </div>
-             <div className="text-left">
-               <div className="font-bold text-base">Análise</div>
-               <div className="text-sm opacity-70">Dados e Resultados</div>
-             </div>
-           </Button>
-           <Button
-             variant="ghost"
-             className="w-full justify-start h-14 bg-gray-50 text-gray-700 hover:bg-[#176B87]/10 hover:text-[#176B87] border border-gray-100 shadow-sm rounded-2xl transition-all duration-300 transform hover:scale-[1.02]"
-             onClick={() => router.push('/dashboard')}
-           >
-             <div className="w-10 h-10 bg-[#176B87]/10 rounded-xl flex items-center justify-center mr-4">
-               <BarChart3 className="h-5 w-5 text-[#176B87]" />
-             </div>
-             <div className="text-left">
-               <div className="font-bold text-base">Dashboard</div>
-               <div className="text-sm opacity-70">KPIs e Indicadores</div>
-             </div>
-           </Button>
-         </nav>
-         <div className="p-8 border-t border-gray-100">
-           <div className="text-xs text-gray-500 text-center">
-             <p className="font-medium">Sistema de Previsão</p>
-             <p className="opacity-70">Versão 1.0</p>
-           </div>
-         </div>
-       </div>
-
-      {/* Conteúdo Principal */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+    <SharedLayout>
       {/* Compact Header */}
       <header className="bg-gradient-to-r from-[#176B87] via-[#145A6B] to-[#124C5F] shadow-xl flex-shrink-0">
         <div className="container mx-auto px-4 py-3">
@@ -759,7 +612,7 @@ export default function DemandForecastPage() {
 
       {/* Main Content - Single Page Layout */}
       <main className="flex-1 container mx-auto px-4 py-4 overflow-hidden">
-        <div className="h-full max-w-7xl mx-auto">
+        <div className="h-full max-w-full mx-auto px-4">
           {/* Main Form Card - Full Height */}
           <Card className="h-full bg-white/95 backdrop-blur-sm shadow-xl border-0 rounded-2xl overflow-hidden flex flex-col">
             <div className="bg-gradient-to-r from-[#176B87] to-[#145A6B] px-6 py-3 flex-shrink-0">
@@ -774,7 +627,7 @@ export default function DemandForecastPage() {
 
               </div>
             </div>
-          <CardContent className="flex-1 p-4 overflow-hidden">
+          <CardContent className="flex-1 p-6 overflow-hidden">
             {/* Mensagem de feedback para exclusão da tabela */}
             {clearTableMessage && (
               <div className={`mb-4 p-3 rounded-lg text-sm font-medium ${
@@ -792,11 +645,12 @@ export default function DemandForecastPage() {
               <input type="hidden" name="diasPrevisao" value={fieldValues.diasPrevisao} />
               <input type="hidden" name="datasAtipicas" value={JSON.stringify(datasAtipicas)} />
               
-              {/* New Layout - Fixed Height Grid */}
-              <div className="flex-1 flex flex-col gap-6 overflow-hidden relative">
+              {/* New Layout - Responsive Grid */}
+              <div className="flex-1 flex flex-col overflow-y-auto">
+                <div className="flex-1 space-y-6">
                 
                 {/* Top Row - 3 Columns with standardized height */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   
                   {/* Superior Esquerdo - Attachment Toggle */}
                   <div className="bg-gradient-to-br from-[#278190]/10 to-[#278190]/15 rounded-xl p-4 border border-[#278190]/20 h-[280px] flex flex-col">
@@ -1432,65 +1286,66 @@ export default function DemandForecastPage() {
                 </div>
                 </div>
                 
-                {/* Bottom Row - Calculate Button - Fixed Position */}
-                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md z-10">
-                  <div className="bg-gradient-to-br from-[#176B87] to-[#145A6B] rounded-xl p-7">
-                    <div className="text-center mb-5">
-                      <div className="flex items-center justify-center gap-3 mb-2">
-                        <h3 className="text-white text-lg font-semibold">Pronto para Calcular?</h3>
-                        <TooltipProvider>
-                          <Tooltip>
-                          <TooltipTrigger asChild>
-                              <div className="w-6 h-6 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center cursor-help transition-colors">
-                                <HelpCircle className="w-4 h-4 text-white" />
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="bg-[#172133] border-[#172133] shadow-xl max-w-sm">
-                              <div className="p-2">
-                                <div className="flex items-center gap-2 mb-3">
-                                  <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center">
-                                    <CheckCircle className="w-4 h-4 text-[#172133]" />
-                                  </div>
-                                  <h4 className="font-semibold text-white">Dicas</h4>
-                                </div>
-                                <div className="space-y-2 text-xs text-white">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-1 h-1 bg-white rounded-full"></div>
-                                    <span><strong>Dados históricos:</strong> pelo menos 12 meses</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-1 h-1 bg-white rounded-full"></div>
-                                    <span><strong>Datas atípicas:</strong> opcionais</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-1 h-1 bg-white rounded-full"></div>
-                                    <span><strong>Previsão:</strong> máximo 24 meses</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <p className="text-white/80 text-sm">Clique para iniciar o processamento</p>
-                    </div>
-                    <Button
-                      type="submit"
-                      disabled={isPending || !selectedFile}
-                      size="lg"
-                      className="w-full bg-[#2FA3BE] hover:bg-[#2891A8] text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none"
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <Calculator className="h-4 w-4" />
-                        <span className="text-sm">{isPending ? "Calculando..." : "Calcular Previsão"}</span>
-                        {!isPending && <ArrowRight className="h-3 w-3" />}
-                      </div>
-                    </Button>
-                  </div>
                 </div>
                 
-                {/* Spacer to prevent content overlap with fixed button */}
-                <div className="h-40"></div>
+                {/* Bottom Row - Calculate Button - Fixed at bottom */}
+                <div className="flex justify-center mt-auto pt-6">
+                  <div className="w-full max-w-md">
+                    <div className="bg-gradient-to-br from-[#176B87] to-[#145A6B] rounded-xl p-6">
+                      <div className="text-center mb-4">
+                        <div className="flex items-center justify-center gap-3 mb-2">
+                          <h3 className="text-white text-lg font-semibold">Pronto para Calcular?</h3>
+                          <TooltipProvider>
+                            <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div className="w-6 h-6 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center cursor-help transition-colors">
+                                  <HelpCircle className="w-4 h-4 text-white" />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="bg-[#172133] border-[#172133] shadow-xl max-w-sm">
+                                <div className="p-2">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center">
+                                      <CheckCircle className="w-4 h-4 text-[#172133]" />
+                                    </div>
+                                    <h4 className="font-semibold text-white">Dicas</h4>
+                                  </div>
+                                  <div className="space-y-2 text-xs text-white">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-1 h-1 bg-white rounded-full"></div>
+                                      <span><strong>Dados históricos:</strong> pelo menos 12 meses</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-1 h-1 bg-white rounded-full"></div>
+                                      <span><strong>Datas atípicas:</strong> opcionais</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-1 h-1 bg-white rounded-full"></div>
+                                      <span><strong>Previsão:</strong> máximo 24 meses</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                        <p className="text-white/80 text-sm">Clique para iniciar o processamento</p>
+                      </div>
+                      <Button
+                        type="submit"
+                        disabled={isPending || !selectedFile}
+                        size="lg"
+                        className="w-full bg-[#2FA3BE] hover:bg-[#2891A8] text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none"
+                      >
+                        <div className="flex items-center justify-center gap-2">
+                          <Calculator className="h-4 w-4" />
+                          <span className="text-sm">{isPending ? "Calculando..." : "Calcular Previsão"}</span>
+                          {!isPending && <ArrowRight className="h-3 w-3" />}
+                        </div>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Campos hidden para enviar valores controlados */}
@@ -1850,7 +1705,6 @@ export default function DemandForecastPage() {
           </div>
         </div>
       )}
-      </div>
-    </div>
+    </SharedLayout>
   )
 }
