@@ -406,10 +406,10 @@ export default function DemandForecastPage() {
 
   const handleMediaFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (file && file.type === "text/csv") {
+    if (file && (file.name.toLowerCase().endsWith('.xlsx') || file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) {
       setSelectedMediaFile(file)
     } else {
-      alert("Por favor, selecione um arquivo CSV válido.")
+      alert("Por favor, selecione um arquivo XLSX válido.")
       event.target.value = ""
     }
   }
@@ -421,74 +421,108 @@ export default function DemandForecastPage() {
     if (fileInput) fileInput.value = ""
   }
 
-  // Função para fazer parsing do CSV de médias
-  const parseMediasCSV = (csvText: string) => {
-    console.log('📄 Iniciando parsing do CSV de médias...')
-    const lines = csvText.split('\n')
-    const data = []
-    const errors = []
-
-    // Pular primeira linha (cabeçalho)
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue // Pular linhas vazias
-
-      const columns = line.split(';')
+  // Função para fazer parsing do XLSX de médias
+  const parseMediasXLSX = (file: File) => {
+    return new Promise<{data: any[], errors: string[]}>((resolve) => {
+      console.log('📄 Iniciando parsing do XLSX de médias...')
+      const reader = new FileReader()
       
-      if (columns.length < 4) {
-        errors.push(`Linha ${i + 1}: Número insuficiente de colunas (${columns.length}/4)`)
-        continue
-      }
-
-      const [sku, fml_item, media_prevista_str, dt_implant_str] = columns
-
-      // Validar se todos os campos estão presentes
-      if (!sku || !fml_item || !media_prevista_str || !dt_implant_str) {
-        errors.push(`Linha ${i + 1}: Campos obrigatórios faltando`)
-        continue
-      }
-
-      // Converter data de dd/mm/yyyy para YYYY-MM-DD
-      let dt_implant
-      try {
-        const dateParts = dt_implant_str.trim().split('/')
-        if (dateParts.length !== 3) {
-          throw new Error('Formato de data inválido')
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer)
+          const workbook = XLSX.read(data, { type: 'array' })
+          const sheetName = workbook.SheetNames[0]
+          const worksheet = workbook.Sheets[sheetName]
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+          
+          const processedData = []
+          const errors = []
+          
+          // Pular primeira linha (cabeçalho) se existir
+          const startRow = 1
+          
+          for (let i = startRow; i < jsonData.length; i++) {
+            const row = jsonData[i] as any[]
+            if (!row || row.length === 0) continue // Pular linhas vazias
+            
+            // Mapear por posição das colunas
+            const sku = row[0] ? String(row[0]).trim() : ''
+            const dt_implant_raw = row[1]
+            const fml_item = row[2] ? String(row[2]).trim() : ''
+            const media_prevista_raw = row[3]
+            
+            // Validar se os campos obrigatórios estão presentes
+            if (!sku || !dt_implant_raw || !fml_item || media_prevista_raw === undefined || media_prevista_raw === null) {
+              errors.push(`Linha ${i + 1}: Campos obrigatórios faltando`)
+              continue
+            }
+            
+            // Converter data de dd/mm/aaaa para YYYY-MM-DD
+            let dt_implant
+            try {
+              let dateStr = String(dt_implant_raw).trim()
+              
+              // Se for um número serial do Excel, converter para data
+              if (!isNaN(Number(dateStr))) {
+                const excelDate = XLSX.SSF.parse_date_code(Number(dateStr))
+                if (excelDate) {
+                  dt_implant = `${excelDate.y}-${String(excelDate.m).padStart(2, '0')}-${String(excelDate.d).padStart(2, '0')}`
+                } else {
+                  throw new Error('Data serial inválida')
+                }
+              } else {
+                // Processar formato dd/mm/aaaa
+                const dateParts = dateStr.split('/')
+                if (dateParts.length !== 3) {
+                  throw new Error('Formato de data inválido')
+                }
+                const [day, month, year] = dateParts
+                dt_implant = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+              }
+            } catch (error) {
+              errors.push(`Linha ${i + 1}: Data inválida (${dt_implant_raw}) - use formato dd/mm/aaaa`)
+              continue
+            }
+            
+            // Converter media_prevista para float
+            let media_prevista
+            try {
+              let mediaStr = String(media_prevista_raw).trim().replace(',', '.')
+              media_prevista = parseFloat(mediaStr)
+              if (isNaN(media_prevista)) {
+                throw new Error('Número inválido')
+              }
+            } catch (error) {
+              errors.push(`Linha ${i + 1}: Média prevista inválida (${media_prevista_raw})`)
+              continue
+            }
+            
+            processedData.push({
+              sku,
+              fml_item,
+              media_prevista,
+              dt_implant
+            })
+          }
+          
+          console.log(`✅ Parsing concluído: ${processedData.length} registros válidos, ${errors.length} erros`)
+          if (errors.length > 0) {
+            console.warn('⚠️ Erros encontrados:', errors)
+          }
+          
+          resolve({ data: processedData, errors })
+        } catch (error) {
+          console.error('❌ Erro ao processar XLSX:', error)
+          resolve({ data: [], errors: [`Erro ao processar arquivo: ${error instanceof Error ? error.message : 'Erro desconhecido'}`] })
         }
-        const [day, month, year] = dateParts
-        dt_implant = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
-      } catch (error) {
-        errors.push(`Linha ${i + 1}: Data inválida (${dt_implant_str}) - use formato dd/mm/yyyy`)
-        continue
       }
-
-      // Converter media_prevista para float (trocar vírgula por ponto)
-      let media_prevista
-      try {
-        const mediaStr = media_prevista_str.trim().replace(',', '.')
-        media_prevista = parseFloat(mediaStr)
-        if (isNaN(media_prevista)) {
-          throw new Error('Número inválido')
-        }
-      } catch (error) {
-        errors.push(`Linha ${i + 1}: Média prevista inválida (${media_prevista_str})`)
-        continue
+      
+      reader.onerror = () => {
+        resolve({ data: [], errors: ['Erro ao ler o arquivo'] })
       }
-
-      data.push({
-        sku: sku.trim(),
-        fml_item: fml_item.trim(),
-        media_prevista,
-        dt_implant
-      })
-    }
-
-    console.log(`✅ Parsing concluído: ${data.length} registros válidos, ${errors.length} erros`)
-    if (errors.length > 0) {
-      console.warn('⚠️ Erros encontrados:', errors)
-    }
-
-    return { data, errors }
+      
+      reader.readAsArrayBuffer(file)
+    })
   }
 
   // Função para confirmar importação
@@ -505,12 +539,9 @@ export default function DemandForecastPage() {
     try {
       console.log('🚀 Iniciando importação de dados...')
       
-      // Ler conteúdo do arquivo
-      const fileContent = await selectedMediaFile.text()
-      console.log('📖 Arquivo lido com sucesso')
-
-      // Fazer parsing do CSV
-      const { data, errors } = parseMediasCSV(fileContent)
+      // Fazer parsing do XLSX
+      console.log('📖 Processando arquivo XLSX...')
+      const { data, errors } = await parseMediasXLSX(selectedMediaFile)
       
       if (errors.length > 0) {
         setImportMessage(`Erros encontrados no arquivo:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`)
@@ -686,7 +717,7 @@ export default function DemandForecastPage() {
                               <FileText className="w-4 h-4 text-white" />
                             </div>
                             <Label htmlFor="mediaFile" className="text-sm font-semibold text-black">
-                              Arquivo de Média (CSV) <span className="text-red-500">*</span>
+                              Arquivo de Média (XLSX) <span className="text-red-500">*</span>
                             </Label>
                             <TooltipProvider>
                               <Tooltip>
@@ -714,19 +745,19 @@ export default function DemandForecastPage() {
                                     <div className="space-y-2 text-xs text-white">
                                       <div className="flex items-center gap-2">
                                         <div className="w-1 h-1 bg-white rounded-full"></div>
-                                        <span><strong>Formato:</strong> CSV</span>
+                                        <span><strong>Formato:</strong> XLSX</span>
                                       </div>
                                       <div className="flex items-center gap-2">
                                         <div className="w-1 h-1 bg-white rounded-full"></div>
-                                        <span><strong>Separador:</strong> ponto e vírgula (;)</span>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-1 h-1 bg-white rounded-full"></div>
-                                        <span><strong>Colunas obrigatórias:</strong> sku, fml_item, media_prevista, dt_implant</span>
+                                        <span><strong>Mapeamento por posição:</strong> Coluna 1=SKU, 2=Data, 3=Família, 4=Média</span>
                                       </div>
                                       <div className="flex items-center gap-2">
                                         <div className="w-1 h-1 bg-white rounded-full"></div>
                                         <span><strong>Formato da Data:</strong> dd/mm/aaaa</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-1 h-1 bg-white rounded-full"></div>
+                                        <span><strong>Observação:</strong> Colunas 5+ são ignoradas</span>
                                       </div>
 
                                     </div>
@@ -740,7 +771,7 @@ export default function DemandForecastPage() {
                           id="mediaFile"
                           name="mediaFile"
                           type="file"
-                          accept=".csv"
+                          accept=".xlsx"
                           className="flex-1 h-9 text-xs border-2 border-dashed border-[#278190]/40 bg-[#278190]/5 hover:border-[#278190]/60 transition-colors file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#278190]/10 file:text-[#278190]"
                           onChange={handleMediaFileChange}
                         />
